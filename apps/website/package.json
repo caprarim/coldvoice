@@ -1,0 +1,11 @@
+{
+  "name": "@coldvoice/website",
+  "version": "0.0.1",
+  "private": true,
+  "description": "ColdVoice marketing, auth, and download website.",
+  "scripts": {
+    "build": "node public/src/build.js",
+    "start": "npx serve dist"
+  },
+  "license": "MIT"
+}

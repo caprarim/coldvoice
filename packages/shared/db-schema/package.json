@@ -1,0 +1,7 @@
+{
+  "name": "@coldvoice/db-schema",
+  "version": "0.0.1",
+  "description": "Shared ColdVoice SQLite schema.",
+  "main": "index.js",
+  "license": "MIT"
+}

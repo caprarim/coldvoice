@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Log in - ColdVoice</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23111'/%3E%3Cpath d='M10 17h3v5h-3zm5-9h3v14h-3zm5 5h3v9h-3z' fill='white'/%3E%3C/svg%3E" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body class="auth-page">
+    <header class="nav">
+      <a class="brand" href="./">Cold Voice</a>
+      <nav aria-label="Primary">
+        <a href="./#download">Download</a>
+        <a href="./signup.html">Sign up</a>
+      </nav>
+    </header>
+
+    <main class="auth-shell">
+      <section class="auth-copy">
+        <p class="eyebrow">Cold Voice account</p>
+        <h1>Log in and keep your download flow ready.</h1>
+        <p>Supabase auth is wired here. Add project credentials and the same form becomes live without changing the page.</p>
+      </section>
+
+      <form class="auth-card" data-auth-form="login">
+        <h2>Log in</h2>
+        <label>Email<input name="email" type="email" autocomplete="email" required /></label>
+        <label>Password<input name="password" type="password" autocomplete="current-password" required minlength="6" /></label>
+        <button class="button primary" type="submit">Log in</button>
+        <p class="auth-status" data-auth-status></p>
+        <a href="./signup.html">Need an account?</a>
+      </form>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="./config.js"></script>
+    <script src="./auth.js"></script>
+  </body>
+</html>

@@ -1,0 +1,10 @@
+{
+  "name": "@coldvoice/text-processing",
+  "version": "0.0.1",
+  "description": "Deterministic offline text cleanup pipeline for ColdVoice.",
+  "main": "src/index.js",
+  "scripts": {
+    "test": "node --test test"
+  },
+  "license": "MIT"
+}

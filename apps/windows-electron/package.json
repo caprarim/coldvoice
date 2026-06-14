@@ -1,0 +1,45 @@
+{
+  "name": "@coldvoice/windows-electron",
+  "version": "0.0.1",
+  "description": "ColdVoice Windows desktop app (Electron).",
+  "main": "src/main/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --config.npmRebuild=false"
+  },
+  "dependencies": {
+    "@coldvoice/text-processing": "*",
+    "@coldvoice/input-detection": "*",
+    "@coldvoice/db-schema": "*",
+    "node-sqlite3-wasm": "^0.8.30"
+  },
+  "devDependencies": {
+    "electron": "33.4.11",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.coldvoice.app",
+    "productName": "ColdVoice",
+    "files": [
+      "src/**/*",
+      "../../packages/shared/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "../../native/asr",
+        "to": "native/asr",
+        "filter": ["**/*"]
+      },
+      {
+        "from": "../../models",
+        "to": "models",
+        "filter": ["ggml-base.en.bin", "README.md"]
+      }
+    ],
+    "win": {
+      "target": "nsis",
+      "artifactName": "ColdVoice-Setup-${version}.${ext}"
+    }
+  },
+  "license": "MIT"
+}

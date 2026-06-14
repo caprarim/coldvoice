@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ColdVoice - Dictate anywhere</title>
+    <meta name="description" content="ColdVoice is offline desktop dictation for Windows. Hold a shortcut, speak, and text appears in the focused app." />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23111'/%3E%3Cpath d='M10 17h3v5h-3zm5-9h3v14h-3zm5 5h3v9h-3z' fill='white'/%3E%3C/svg%3E" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="nav">
+      <a class="brand" href="./">Cold Voice</a>
+      <nav aria-label="Primary">
+        <a href="#features">Features</a>
+        <a href="#download">Download</a>
+        <a href="#faq">FAQ</a>
+        <a href="./login.html">Log in</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="hero" id="download">
+        <div class="hero-copy">
+          <p class="eyebrow">Cold Voice - speak into any app</p>
+          <h1>Dictate on Windows without changing your workflow.</h1>
+          <p class="lead">Hold your shortcut, speak naturally, and ColdVoice turns it into cleaned text inside the app you already had focused. The ASR runtime ships with the Windows installer.</p>
+          <div class="actions">
+            <a class="button primary" data-download-link href="./downloads/ColdVoice-Setup-0.0.1.exe">Get for Windows</a>
+            <a class="button secondary" href="./signup.html">Create account</a>
+          </div>
+          <p class="download-status" data-download-status>Checking installer...</p>
+        </div>
+
+        <div class="product-window" aria-label="ColdVoice desktop app preview">
+          <div class="window-bar">
+            <span>Cold Voice v0.0.1</span>
+            <span>- □ x</span>
+          </div>
+          <div class="window-grid">
+            <aside>
+              <b>Cold Voice</b>
+              <a class="active">Home</a>
+              <a>Dictionary</a>
+              <a>Snippets</a>
+              <a>History</a>
+              <a>Settings</a>
+            </aside>
+            <section>
+              <div class="dictation-pill">
+                <button aria-label="Cancel">x</button>
+                <span></span><span></span><span></span>
+                <button aria-label="Confirm">✓</button>
+              </div>
+              <p class="screen-label">Hold Ctrl+1</p>
+              <h2>Speak. Release. Text lands where you were typing.</h2>
+              <div class="transcript">
+                <span>Raw speech</span>
+                <p>cold voice write the project update comma send it to the client</p>
+              </div>
+              <div class="transcript final">
+                <span>Inserted text</span>
+                <p>ColdVoice, write the project update, send it to the client.</p>
+              </div>
+            </section>
+          </div>
+        </div>
+      </section>
+
+      <section class="platforms" id="features">
+        <p class="section-kicker">Available now</p>
+        <h2>Desktop dictation that acts like a small system tool.</h2>
+        <div class="split">
+          <article>
+            <span>0 1</span>
+            <h3>Global shortcut</h3>
+            <p>Press the configured shortcut from any focused Windows app. ColdVoice records, transcribes, cleans, and inserts.</p>
+          </article>
+          <article>
+            <span>0 2</span>
+            <h3>Local transcription</h3>
+            <p>The Windows build uses the bundled whisper.cpp runtime and local model. No cloud transcription path is used.</p>
+          </article>
+          <article>
+            <span>0 3</span>
+            <h3>Wispr-style pill</h3>
+            <p>A compact black pill appears while recording, with cancel, live recording dots, and confirm behavior.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="problem">
+        <p class="section-kicker">The actual job</p>
+        <h2>You do not need another notes app.</h2>
+        <p>ColdVoice is for the exact moment your hands are already in the editor, terminal, browser, or client document. The focused field stays the target.</p>
+        <div class="sequence">
+          <span>0 1 Hold Ctrl+1</span>
+          <span>0 2 Say the sentence</span>
+          <span>0 3 Release</span>
+          <span>0 4 Text appears</span>
+        </div>
+      </section>
+
+      <section class="features">
+        <p class="section-kicker">Features</p>
+        <h2>Every feature supports faster dictation.</h2>
+        <div class="feature-grid">
+          <article><b>Windows</b><h3>Installer download</h3><p>The website links to the packaged `.exe` installer for the desktop app.</p></article>
+          <article><b>Windows</b><h3>Clipboard-safe paste</h3><p>Insertion uses paste while restoring the previous clipboard content after writing.</p></article>
+          <article><b>Privacy</b><h3>Password refusal</h3><p>ColdVoice refuses insertion into password fields instead of blindly pasting.</p></article>
+          <article><b>Auth</b><h3>Supabase login</h3><p>Login and sign-up pages use Supabase auth when project credentials are configured.</p></article>
+        </div>
+      </section>
+
+      <section class="faq" id="faq">
+        <p class="section-kicker">Questions</p>
+        <h2>Common questions.</h2>
+        <details open>
+          <summary>Does the installer include dictation support?</summary>
+          <p>Yes. The Windows package is configured to include the local ASR executable and base English model.</p>
+        </details>
+        <details>
+          <summary>Do I need an account to use desktop dictation?</summary>
+          <p>The desktop app is local-first. Website accounts are wired for Supabase auth and future user flows.</p>
+        </details>
+        <details>
+          <summary>Which platforms are being handled first?</summary>
+          <p>This pass verifies Windows desktop and the public website. Mobile remains part of the wider goal, but it is not the current test target.</p>
+        </details>
+      </section>
+
+      <section class="cta">
+        <h2>Ready to dictate without leaving the app you are using?</h2>
+        <a class="button primary" data-download-link href="./downloads/ColdVoice-Setup-0.0.1.exe">Download ColdVoice</a>
+      </section>
+    </main>
+
+    <footer>
+      <span>Cold Voice</span>
+      <nav>
+        <a href="./signup.html">Sign up</a>
+        <a href="./login.html">Log in</a>
+        <a data-download-link href="./downloads/ColdVoice-Setup-0.0.1.exe">Windows installer</a>
+      </nav>
+    </footer>
+
+    <script src="./config.js"></script>
+    <script src="./app.js"></script>
+  </body>
+</html>

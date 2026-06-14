@@ -1,0 +1,57 @@
+html, body { margin: 0; background: transparent; overflow: hidden; }
+
+.pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 44px;
+  margin: 6px;
+  padding: 0 8px;
+  background: #0b0d12;
+  border: 1px solid #2a2f3a;
+  border-radius: 999px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
+  font-family: "Segoe UI", system-ui, sans-serif;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.side {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  color: #e7e9ee;
+  background: #1f232c;
+}
+.cancel:hover { background: #e05260; color: #fff; }
+.confirm:hover { background: #3ec98a; color: #fff; }
+
+.center {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 100%;
+  color: #9aa3b2;
+  font-size: 12px;
+}
+
+.dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: #4f7cff;
+  animation: pulse 1s infinite ease-in-out;
+}
+.dot:nth-child(2) { animation-delay: 0.15s; }
+.dot:nth-child(3) { animation-delay: 0.3s; }
+
+@keyframes pulse {
+  0%, 100% { transform: scale(0.6); opacity: 0.4; }
+  50% { transform: scale(1); opacity: 1; }
+}
+
+.center.text { font-size: 11px; padding: 0 8px; text-align: center; }
+.center.error { color: #e05260; }

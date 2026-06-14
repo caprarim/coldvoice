@@ -1,0 +1,20 @@
+node_modules/
+dist/
+build/
+out/
+*.log
+_pill*.png
+
+# Local ASR models are never committed.
+models/*
+!models/README.md
+
+# Downloaded whisper.cpp binaries (fetched, not source).
+native/asr/*.exe
+native/asr/*.dll
+!native/asr/README.md
+
+# Local SQLite databases.
+*.sqlite
+*.sqlite3
+*.db

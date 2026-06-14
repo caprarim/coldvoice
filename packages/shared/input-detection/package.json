@@ -1,0 +1,10 @@
+{
+  "name": "@coldvoice/input-detection",
+  "version": "0.0.1",
+  "description": "Platform-agnostic editable-target and password-field rejection rules.",
+  "main": "index.js",
+  "scripts": {
+    "test": "node --test test"
+  },
+  "license": "MIT"
+}

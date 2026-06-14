@@ -1,0 +1,19 @@
+{
+  "name": "coldvoice",
+  "version": "0.0.1",
+  "private": true,
+  "description": "ColdVoice — offline, privacy-first voice dictation for Windows and Android.",
+  "workspaces": [
+    "packages/shared/text-processing",
+    "packages/shared/input-detection",
+    "packages/shared/db-schema",
+    "apps/windows-electron",
+    "apps/website"
+  ],
+  "scripts": {
+    "test": "node --test \"packages/shared/text-processing/test/*.test.js\" \"packages/shared/input-detection/test/*.test.js\"",
+    "build:website": "npm run build -w apps/website",
+    "dist:windows": "npm run dist -w apps/windows-electron"
+  },
+  "license": "MIT"
+}

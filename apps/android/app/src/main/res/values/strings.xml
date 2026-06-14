@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">ColdVoice</string>
+    <string name="a11y_description">Used only to detect when an editable text field is focused so the ColdVoice bubble can appear beside it. ColdVoice never reads or logs password or secure fields.</string>
+</resources>

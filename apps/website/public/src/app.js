@@ -9,16 +9,22 @@ for (const link of document.querySelectorAll('[data-download-link]')) {
 
 const statusEl = document.querySelector('[data-download-status]');
 if (statusEl) {
-  fetch(downloadUrl, { method: 'HEAD' })
-    .then((res) => {
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const len = Number(res.headers.get('content-length') || 0);
-      const size = len ? ` (${Math.round(len / 1024 / 1024)} MB)` : '';
-      statusEl.textContent = `Windows installer ready${size}.`;
-      statusEl.classList.add('ok');
-    })
-    .catch(() => {
-      statusEl.textContent = 'Installer link is configured; build or release upload still needs to provide the .exe.';
-      statusEl.classList.add('warn');
-    });
+  const isExternal = /^https?:\/\//i.test(downloadUrl) && !downloadUrl.startsWith(window.location.origin);
+  if (isExternal) {
+    statusEl.textContent = 'Windows installer ready via GitHub Release.';
+    statusEl.classList.add('ok');
+  } else {
+    fetch(downloadUrl, { method: 'HEAD' })
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const len = Number(res.headers.get('content-length') || 0);
+        const size = len ? ` (${Math.round(len / 1024 / 1024)} MB)` : '';
+        statusEl.textContent = `Windows installer ready${size}.`;
+        statusEl.classList.add('ok');
+      })
+      .catch(() => {
+        statusEl.textContent = 'Installer link is configured; build or release upload still needs to provide the .exe.';
+        statusEl.classList.add('warn');
+      });
+  }
 }

@@ -3,145 +3,347 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>ColdVoice - Dictate anywhere</title>
-    <meta name="description" content="ColdVoice is offline desktop dictation for Windows. Hold a shortcut, speak, and text appears in the focused app." />
+    <title>ColdVoice — Speak into any app, hands-free</title>
+    <meta name="description" content="ColdVoice is voice dictation for Windows and Android. Hold a shortcut, speak naturally, and cleaned text lands wherever your cursor is — on-device or cloud." />
+    <link rel="canonical" href="https://coldvoice.vercel.app/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://coldvoice.vercel.app/" />
+    <meta property="og:title" content="ColdVoice — Speak into any app, hands-free" />
+    <meta property="og:description" content="Voice dictation for Windows and Android. Local or cloud Whisper, injected wherever you type." />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="ColdVoice — Speak into any app, hands-free" />
+    <meta name="twitter:description" content="Voice dictation for Windows and Android. Local or cloud Whisper, injected wherever you type." />
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23111'/%3E%3Cpath d='M10 17h3v5h-3zm5-9h3v14h-3zm5 5h3v9h-3z' fill='white'/%3E%3C/svg%3E" />
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
     <header class="nav">
-      <a class="brand" href="./">Cold Voice</a>
-      <nav aria-label="Primary">
+      <a class="brand" href="./"><span class="logo-cold">Cold</span><span class="logo-work">Voice</span></a>
+      <nav class="nav-links" aria-label="Primary">
         <a href="#features">Features</a>
-        <a href="#download">Download</a>
+        <a href="#how">How it works</a>
         <a href="#faq">FAQ</a>
-        <a href="./login.html">Log in</a>
+        <a class="nav-login" href="./login.html">Log in</a>
+        <a class="nav-cta" data-download-link href="./downloads/ColdVoice-Setup-0.0.1.exe">Get ColdVoice</a>
       </nav>
+      <button class="hamburger" id="hamburger" aria-label="Toggle menu" aria-expanded="false">
+        <span></span><span></span><span></span>
+      </button>
     </header>
 
+    <div class="mobile-menu" id="mobile-menu">
+      <p class="mm-label">Navigation</p>
+      <a href="#features"><span>Features</span></a>
+      <a href="#how"><span>How it works</span></a>
+      <a href="#faq"><span>FAQ</span></a>
+      <a href="#download"><span>Download</span></a>
+      <a class="mm-cta" href="./login.html">Log in</a>
+      <div class="mm-foot">ColdVoice — Speak anywhere</div>
+    </div>
+
     <main>
+      <!-- ============================================= hero -->
       <section class="hero" id="download">
-        <div class="hero-copy">
-          <p class="eyebrow">Cold Voice - speak into any app</p>
-          <h1>Dictate on Windows without changing your workflow.</h1>
-          <p class="lead">Hold your shortcut, speak naturally, and ColdVoice turns it into cleaned text inside the app you already had focused. The ASR runtime ships with the Windows installer.</p>
-          <div class="actions">
-            <a class="button primary" data-download-link href="./downloads/ColdVoice-Setup-0.0.1.exe">Get for Windows</a>
-            <a class="button secondary" href="./signup.html">Create account</a>
+        <div class="hero-inner">
+          <div class="hero-copy">
+            <p class="eyebrow">Voice dictation for every app</p>
+            <h1>Dictate hands-free,<br />into any app.</h1>
+            <p class="lead">Hold your shortcut, speak naturally — ColdVoice drops cleaned text straight into whatever's focused. On-device Whisper for privacy, cloud Whisper for 99+ languages.</p>
+            <div class="actions">
+              <a class="btn btn-primary" data-download-link href="./downloads/ColdVoice-Setup-0.0.1.exe">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801"/></svg>
+                Get for Windows
+              </a>
+              <a class="btn" data-android-link href="./downloads/ColdVoice.apk">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 18c0 .55.45 1 1 1h1v3.5c0 .83.67 1.5 1.5 1.5s1.5-.67 1.5-1.5V19h2v3.5c0 .83.67 1.5 1.5 1.5s1.5-.67 1.5-1.5V19h1c.55 0 1-.45 1-1V8H6v10zM3.5 8C2.67 8 2 8.67 2 9.5v7c0 .83.67 1.5 1.5 1.5S5 17.33 5 16.5v-7C5 8.67 4.33 8 3.5 8zm17 0c-.83 0-1.5.67-1.5 1.5v7c0 .83.67 1.5 1.5 1.5s1.5-.67 1.5-1.5v-7c0-.83-.67-1.5-1.5-1.5zm-4.97-5.84l1.3-1.3c.2-.2.2-.51 0-.71-.2-.2-.51-.2-.71 0l-1.48 1.48C13.85 1.23 12.95 1 12 1c-.96 0-1.86.23-2.66.63L7.85.15c-.2-.2-.51-.2-.71 0-.2.2-.2.51 0 .71l1.31 1.31C6.97 3.26 6 5.01 6 7h12c0-1.99-.97-3.75-2.47-4.84zM10 5H9V4h1v1zm5 0h-1V4h1v1z"/></svg>
+                Get for Android
+              </a>
+            </div>
+            <p class="download-status" data-download-status>Checking installer...</p>
           </div>
-          <p class="download-status" data-download-status>Checking installer...</p>
-        </div>
 
-        <div class="product-window" aria-label="ColdVoice desktop app preview">
-          <div class="window-bar">
-            <span>Cold Voice v0.0.1</span>
-            <span>- □ x</span>
+          <div class="product-window" aria-label="ColdVoice desktop app preview">
+            <div class="window-bar">
+              <span>Cold Voice v0.0.1</span>
+              <span>- &#9633; &#10005;</span>
+            </div>
+            <div class="window-grid">
+              <aside>
+                <b>Cold Voice</b>
+                <a class="active">Home</a>
+                <a>Dictionary</a>
+                <a>Snippets</a>
+                <a>History</a>
+                <a>Settings</a>
+              </aside>
+              <section>
+                <div class="dictation-pill">
+                  <button aria-label="Cancel">&#10005;</button>
+                  <span></span><span></span><span></span>
+                  <button aria-label="Confirm">&#10003;</button>
+                </div>
+                <div class="transcript">
+                  <span>Raw speech</span>
+                  <p>cold voice write the project update comma send it to the client</p>
+                </div>
+                <div class="transcript final">
+                  <span>Inserted text</span>
+                  <p>ColdVoice, write the project update, send it to the client.</p>
+                </div>
+              </section>
+            </div>
           </div>
-          <div class="window-grid">
-            <aside>
-              <b>Cold Voice</b>
-              <a class="active">Home</a>
-              <a>Dictionary</a>
-              <a>Snippets</a>
-              <a>History</a>
-              <a>Settings</a>
-            </aside>
-            <section>
-              <div class="dictation-pill">
-                <button aria-label="Cancel">x</button>
-                <span></span><span></span><span></span>
-                <button aria-label="Confirm">✓</button>
-              </div>
-              <p class="screen-label">Hold Ctrl+1</p>
-              <h2>Speak. Release. Text lands where you were typing.</h2>
-              <div class="transcript">
-                <span>Raw speech</span>
-                <p>cold voice write the project update comma send it to the client</p>
-              </div>
-              <div class="transcript final">
-                <span>Inserted text</span>
-                <p>ColdVoice, write the project update, send it to the client.</p>
-              </div>
-            </section>
+          <div class="mockup-caption">
+            <p class="screen-label">Hold Ctrl+1</p>
+            <p>Speak. Release. Text lands where you were typing.</p>
           </div>
         </div>
       </section>
 
-      <section class="platforms" id="features">
-        <p class="section-kicker">Available now</p>
-        <h2>Desktop dictation that acts like a small system tool.</h2>
-        <div class="split">
-          <article>
-            <span>0 1</span>
-            <h3>Global shortcut</h3>
-            <p>Press the configured shortcut from any focused Windows app. ColdVoice records, transcribes, cleans, and inserts.</p>
-          </article>
-          <article>
-            <span>0 2</span>
-            <h3>Local transcription</h3>
-            <p>The Windows build uses the bundled whisper.cpp runtime and local model. No cloud transcription path is used.</p>
-          </article>
-          <article>
-            <span>0 3</span>
-            <h3>Wispr-style pill</h3>
-            <p>A compact black pill appears while recording, with cancel, live recording dots, and confirm behavior.</p>
-          </article>
+      <!-- ===================================== works everywhere -->
+      <section class="section works">
+        <div class="section-inner">
+          <div class="works-split">
+            <div class="works-left">
+              <p class="eyebrow">Works everywhere</p>
+              <h2 class="heading">Your voice, in every app you ship with.</h2>
+            </div>
+            <div class="works-right">
+              <p>ColdVoice isn't locked to one editor. It's a global voice layer — drop text into Cursor, your terminal, Slack, or the browser without breaking flow.</p>
+            </div>
+          </div>
+          <div class="works-grid">
+            <div class="works-card">
+              <p class="works-card-label">Prompt your agents by voice</p>
+              <p class="works-card-desc">Speak prompts straight into Cursor or your agent — describe what to build and let it run.</p>
+            </div>
+            <div class="works-card">
+              <p class="works-card-label">Write commits, docs & messages</p>
+              <p class="works-card-desc">PR descriptions, Slack replies, docs, emails — dictated into the app you're already in.</p>
+            </div>
+            <div class="works-card">
+              <p class="works-card-label">Accessible by design</p>
+              <p class="works-card-desc">A hands-free alternative for builders with RSI or carpal tunnel — no keyboard gymnastics required.</p>
+            </div>
+            <div class="works-card">
+              <p class="works-card-label">Offline & multilingual</p>
+              <p class="works-card-desc">Local mode runs fully offline. Cloud mode unlocks 99+ languages with automatic detection.</p>
+            </div>
+          </div>
         </div>
       </section>
 
-      <section class="problem">
-        <p class="section-kicker">The actual job</p>
-        <h2>You do not need another notes app.</h2>
-        <p>ColdVoice is for the exact moment your hands are already in the editor, terminal, browser, or client document. The focused field stays the target.</p>
-        <div class="sequence">
-          <span>0 1 Hold Ctrl+1</span>
-          <span>0 2 Say the sentence</span>
-          <span>0 3 Release</span>
-          <span>0 4 Text appears</span>
+      <!-- ===================================== platforms -->
+      <section class="section platforms">
+        <div class="section-inner">
+          <div class="label-row">
+            <div class="label-line"></div>
+            <p class="label-text">Available on</p>
+            <div class="label-line r"></div>
+          </div>
+          <h2 class="heading">Dictate on every device</h2>
+          <p class="plat-sub">Windows and Android. On-device transcription on both.</p>
+
+          <div class="plat-grid">
+            <div class="plat-card">
+              <p class="plat-tag">Windows</p>
+              <div class="plat-mockup">
+                <div class="plat-mockup-bar"><span class="plat-dot"></span><span class="plat-dot"></span><span class="plat-dot"></span></div>
+                <div class="plat-mock-body">
+                  <span class="plat-mock-pill"><i></i><i></i><i></i></span>
+                  Dictating into your editor
+                </div>
+              </div>
+              <div class="plat-features">
+                <div class="plat-feature"><span class="num">01</span><div><p class="t">Global shortcut</p><p class="d">Press your shortcut from any focused app — ColdVoice records, cleans, and injects.</p></div></div>
+                <div class="plat-feature"><span class="num">02</span><div><p class="t">Clipboard-safe paste</p><p class="d">Insertion restores your previous clipboard content after writing the text.</p></div></div>
+                <div class="plat-feature"><span class="num">03</span><div><p class="t">Works offline</p><p class="d">Bundled whisper.cpp runtime — no cloud path required for English.</p></div></div>
+              </div>
+              <a class="btn" data-download-link href="./downloads/ColdVoice-Setup-0.0.1.exe">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801"/></svg>
+                Get for Windows
+              </a>
+            </div>
+
+            <div class="plat-card">
+              <p class="plat-tag">Android</p>
+              <div class="plat-mockup">
+                <div class="plat-mock-body">
+                  <div class="plat-phone"><span class="plat-mock-pill"><i></i><i></i><i></i></span></div>
+                </div>
+              </div>
+              <div class="plat-features">
+                <div class="plat-feature"><span class="num">01</span><div><p class="t">Flow bubble</p><p class="d">A mic bubble appears when you focus a text field. Tap to dictate directly into the app.</p></div></div>
+                <div class="plat-feature"><span class="num">02</span><div><p class="t">On-device speech</p><p class="d">Runs on the phone offline by default — fast and private without a server.</p></div></div>
+                <div class="plat-feature"><span class="num">03</span><div><p class="t">Long-form dictation</p><p class="d">Keep speaking — ColdVoice inserts as you go and copies to clipboard.</p></div></div>
+              </div>
+              <a class="btn" data-android-link href="./downloads/ColdVoice.apk">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 18c0 .55.45 1 1 1h1v3.5c0 .83.67 1.5 1.5 1.5s1.5-.67 1.5-1.5V19h2v3.5c0 .83.67 1.5 1.5 1.5s1.5-.67 1.5-1.5V19h1c.55 0 1-.45 1-1V8H6v10zM3.5 8C2.67 8 2 8.67 2 9.5v7c0 .83.67 1.5 1.5 1.5S5 17.33 5 16.5v-7C5 8.67 4.33 8 3.5 8zm17 0c-.83 0-1.5.67-1.5 1.5v7c0 .83.67 1.5 1.5 1.5s1.5-.67 1.5-1.5v-7c0-.83-.67-1.5-1.5-1.5zm-4.97-5.84l1.3-1.3c.2-.2.2-.51 0-.71-.2-.2-.51-.2-.71 0l-1.48 1.48C13.85 1.23 12.95 1 12 1c-.96 0-1.86.23-2.66.63L7.85.15c-.2-.2-.51-.2-.71 0-.2.2-.2.51 0 .71l1.31 1.31C6.97 3.26 6 5.01 6 7h12c0-1.99-.97-3.75-2.47-4.84zM10 5H9V4h1v1zm5 0h-1V4h1v1z"/></svg>
+                Get for Android
+              </a>
+            </div>
+          </div>
         </div>
       </section>
 
-      <section class="features">
-        <p class="section-kicker">Features</p>
-        <h2>Every feature supports faster dictation.</h2>
-        <div class="feature-grid">
-          <article><b>Windows</b><h3>Installer download</h3><p>The website links to the packaged `.exe` installer for the desktop app.</p></article>
-          <article><b>Windows</b><h3>Clipboard-safe paste</h3><p>Insertion uses paste while restoring the previous clipboard content after writing.</p></article>
-          <article><b>Privacy</b><h3>Password refusal</h3><p>ColdVoice refuses insertion into password fields instead of blindly pasting.</p></article>
-          <article><b>Auth</b><h3>Supabase login</h3><p>Login and sign-up pages use Supabase auth when project credentials are configured.</p></article>
+      <!-- ===================================== how it works -->
+      <section class="section how" id="how">
+        <div class="grid-bg"></div>
+        <div class="section-inner">
+          <div class="how-top">
+            <p class="eyebrow">How it works</p>
+            <h2 class="heading">One shortcut.<br /><span>Text where you were typing.</span></h2>
+          </div>
+          <div class="how-grid">
+            <div class="glow-card"><span class="how-num">01</span><div class="how-rule"></div><h3 class="how-card-title">Hold the shortcut</h3><p class="how-card-text">Press Ctrl+1 from any focused field — editor, terminal, browser, or chat app.</p></div>
+            <div class="glow-card"><span class="how-num">02</span><div class="how-rule"></div><h3 class="how-card-title">Speak naturally</h3><p class="how-card-text">Just talk. ColdVoice transcribes on-device or via cloud as you speak.</p></div>
+            <div class="glow-card"><span class="how-num">03</span><div class="how-rule"></div><h3 class="how-card-title">Release</h3><p class="how-card-text">Text is cleaned — punctuation added, filler removed, your custom dictionary applied.</p></div>
+            <div class="glow-card"><span class="how-num">04</span><div class="how-rule"></div><h3 class="how-card-title">Text appears</h3><p class="how-card-text">It lands in the field you had focused and stays on your clipboard.</p></div>
+          </div>
         </div>
       </section>
 
-      <section class="faq" id="faq">
-        <p class="section-kicker">Questions</p>
-        <h2>Common questions.</h2>
-        <details open>
-          <summary>Does the installer include dictation support?</summary>
-          <p>Yes. The Windows package is configured to include the local ASR executable and base English model.</p>
-        </details>
-        <details>
-          <summary>Do I need an account to use desktop dictation?</summary>
-          <p>The desktop app is local-first. Website accounts are wired for Supabase auth and future user flows.</p>
-        </details>
-        <details>
-          <summary>Which platforms are being handled first?</summary>
-          <p>This pass verifies Windows desktop and the public website. Mobile remains part of the wider goal, but it is not the current test target.</p>
-        </details>
+      <!-- ===================================== features -->
+      <section class="section features" id="features">
+        <div class="grid-bg"></div>
+        <div class="section-inner">
+          <p class="eyebrow">Features</p>
+          <h2 class="heading">Every detail tuned for <span>faster dictation.</span></h2>
+          <div class="feature-grid">
+            <div class="glow-card"><span class="tag">Injection</span><h3>Universal text injection</h3><p>Your words land in whatever app has focus — editor, terminal, Slack, browser. One voice layer across your whole desktop.</p></div>
+            <div class="glow-card"><span class="tag">Engine</span><h3>Local or cloud — you choose</h3><p>On-device Whisper for private offline English. Cloud mode unlocks 99+ languages with auto-detect. Switch anytime.</p></div>
+            <div class="glow-card"><span class="tag">Control</span><h3>Push-to-talk & toggle</h3><p>Hold to dictate or toggle hands-free. Fully customizable global hotkeys — set any key combo that fits your flow.</p></div>
+            <div class="glow-card"><span class="tag">Speed</span><h3>Sub-second transcription</h3><p>Recording starts in under 10ms. Speech to text in under a second — local or cloud, no perceptible lag.</p></div>
+            <div class="glow-card"><span class="tag">Dictionary</span><h3>Custom developer dictionary</h3><p>Map spoken phrases to exact terms, product names, and casing that Whisper would otherwise miss or mangle.</p></div>
+            <div class="glow-card"><span class="tag">History</span><h3>Usage stats & history</h3><p>Every transcription is saved locally. Track words spoken and speaking time — recopy anything in one click.</p></div>
+          </div>
+        </div>
       </section>
 
+      <!-- ===================================== privacy -->
+      <section class="section privacy">
+        <div class="section-inner">
+          <div class="privacy-split">
+            <div class="privacy-left">
+              <p class="eyebrow">100% private</p>
+              <h2 class="heading">No audio leaves<br />your machine.</h2>
+            </div>
+            <div class="privacy-right">
+              <p class="privacy-intro">Most dictation tools ship your voice to the cloud — adding latency and risk. ColdVoice runs <code>whisper.cpp</code> natively for instant, private transcription. Cloud mode is opt-in only.</p>
+              <div class="privacy-items">
+                <div class="privacy-item"><span class="privacy-dot"></span><p>On-device mode processes everything locally via <code>whisper.cpp</code> — no server involved</p></div>
+                <div class="privacy-item"><span class="privacy-dot"></span><p>Cloud mode sends audio over HTTPS only when you explicitly choose it</p></div>
+                <div class="privacy-item"><span class="privacy-dot"></span><p>No audio is ever stored — only transcript history, saved locally if you enable it</p></div>
+                <div class="privacy-item"><span class="privacy-dot"></span><p>Refuses insertion into password fields</p></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===================================== faq -->
+      <section class="section faq" id="faq">
+        <div class="grid-bg"></div>
+        <div class="section-inner">
+          <div class="faq-top">
+            <p class="eyebrow">Questions</p>
+            <h2 class="heading">Frequently<br /><span>asked.</span></h2>
+          </div>
+          <div class="faq-list">
+            <div class="faq-item">
+              <button class="faq-btn" aria-expanded="false">
+                <span>What is ColdVoice?</span>
+                <span class="faq-icon">+</span>
+              </button>
+              <div class="faq-body"><p>A desktop and Android dictation app. Local mode runs Whisper AI on-device; cloud mode uses Groq Whisper for 99+ languages. Text is injected into whatever app has focus — no clipboard gymnastics, no app switching.</p></div>
+            </div>
+            <div class="faq-item">
+              <button class="faq-btn" aria-expanded="false">
+                <span>Is my voice actually private?</span>
+                <span class="faq-icon">+</span>
+              </button>
+              <div class="faq-body"><p>In local mode, yes — all audio is processed on-device via <code>whisper.cpp</code>. Nothing leaves your machine. Cloud mode sends audio over HTTPS only when you choose it. You're always in control of which mode is running.</p></div>
+            </div>
+            <div class="faq-item">
+              <button class="faq-btn" aria-expanded="false">
+                <span>How do I install the Android app?</span>
+                <span class="faq-icon">+</span>
+              </button>
+              <div class="faq-body"><p>Tap Get for Android to download the APK, then open it on your phone. You may need to allow installs from unknown sources — that's standard for apps distributed outside the Play Store.</p></div>
+            </div>
+            <div class="faq-item">
+              <button class="faq-btn" aria-expanded="false">
+                <span>Is it fast?</span>
+                <span class="faq-icon">+</span>
+              </button>
+              <div class="faq-body"><p>Recording starts in under 10ms. Local transcription completes in under a second. Cloud mode via Groq Whisper is similarly fast. Long passages are chunked so nothing gets dropped mid-dictation.</p></div>
+            </div>
+            <div class="faq-item">
+              <button class="faq-btn" aria-expanded="false">
+                <span>What languages are supported?</span>
+                <span class="faq-icon">+</span>
+              </button>
+              <div class="faq-body"><p>Local mode supports English offline. Cloud mode unlocks 99+ languages with automatic detection — just speak and ColdVoice figures out the language.</p></div>
+            </div>
+            <div class="faq-item">
+              <button class="faq-btn" aria-expanded="false">
+                <span>Which platforms are supported?</span>
+                <span class="faq-icon">+</span>
+              </button>
+              <div class="faq-body"><p>Windows 10/11 desktop and Android. Both platforms share the same transcription and text-cleaning pipeline. The Windows app uses a global key hook for hotkeys; Android uses an accessibility service and IME.</p></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===================================== cta -->
       <section class="cta">
-        <h2>Ready to dictate without leaving the app you are using?</h2>
-        <a class="button primary" data-download-link href="./downloads/ColdVoice-Setup-0.0.1.exe">Download ColdVoice</a>
+        <div class="cta-inner">
+          <p class="eyebrow">Ready to dictate hands-free?</p>
+          <h2>Speak into any app.<br />Online or offline.</h2>
+          <p>Download ColdVoice for Windows or Android and start dictating into whatever you're building.</p>
+          <div class="actions">
+            <a class="btn btn-primary" data-download-link href="./downloads/ColdVoice-Setup-0.0.1.exe">Get for Windows</a>
+            <a class="btn" data-android-link href="./downloads/ColdVoice.apk">Get for Android</a>
+          </div>
+        </div>
       </section>
     </main>
 
-    <footer>
-      <span>Cold Voice</span>
-      <nav>
-        <a href="./signup.html">Sign up</a>
-        <a href="./login.html">Log in</a>
-        <a data-download-link href="./downloads/ColdVoice-Setup-0.0.1.exe">Windows installer</a>
-      </nav>
+    <!-- ===================================== footer -->
+    <footer class="footer">
+      <div class="footer-inner">
+        <div class="footer-top">
+          <div class="footer-brand">
+            <p class="footer-logo"><span class="logo-cold">Cold</span><span class="logo-work">Voice</span></p>
+            <p class="footer-bio">Voice dictation for the moment your hands are already in the editor, terminal, or chat. Speak, and cleaned text lands where your cursor was.</p>
+            <div class="footer-dl">
+              <a class="btn" data-download-link href="./downloads/ColdVoice-Setup-0.0.1.exe">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801"/></svg>
+                Get for Windows
+              </a>
+              <a class="btn" data-android-link href="./downloads/ColdVoice.apk">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 18c0 .55.45 1 1 1h1v3.5c0 .83.67 1.5 1.5 1.5s1.5-.67 1.5-1.5V19h2v3.5c0 .83.67 1.5 1.5 1.5s1.5-.67 1.5-1.5V19h1c.55 0 1-.45 1-1V8H6v10zM3.5 8C2.67 8 2 8.67 2 9.5v7c0 .83.67 1.5 1.5 1.5S5 17.33 5 16.5v-7C5 8.67 4.33 8 3.5 8zm17 0c-.83 0-1.5.67-1.5 1.5v7c0 .83.67 1.5 1.5 1.5s1.5-.67 1.5-1.5v-7c0-.83-.67-1.5-1.5-1.5zm-4.97-5.84l1.3-1.3c.2-.2.2-.51 0-.71-.2-.2-.51-.2-.71 0l-1.48 1.48C13.85 1.23 12.95 1 12 1c-.96 0-1.86.23-2.66.63L7.85.15c-.2-.2-.51-.2-.71 0-.2.2-.2.51 0 .71l1.31 1.31C6.97 3.26 6 5.01 6 7h12c0-1.99-.97-3.75-2.47-4.84zM10 5H9V4h1v1zm5 0h-1V4h1v1z"/></svg>
+                Get for Android
+              </a>
+            </div>
+          </div>
+          <div class="footer-meta">
+            <p class="footer-meta-label">Account</p>
+            <a class="footer-chip" href="./login.html">Log in</a>
+            <a class="footer-chip" href="./signup.html">Create account</a>
+          </div>
+        </div>
+        <div class="footer-bottom">
+          <p class="copy">&copy; 2026 ColdVoice. All rights reserved.</p>
+          <div class="links">
+            <a href="./signup.html">Sign up</a>
+            <span class="dot">&middot;</span>
+            <a href="./login.html">Log in</a>
+          </div>
+          <p class="ver">v0.0.1</p>
+        </div>
+      </div>
     </footer>
 
     <script src="./config.js"></script>

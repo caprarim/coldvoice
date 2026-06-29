@@ -2,6 +2,7 @@ package com.coldvoice
 
 import android.Manifest
 import android.app.Activity
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
@@ -12,7 +13,9 @@ import android.provider.Settings
 import android.speech.SpeechRecognizer
 import android.view.Gravity
 import android.view.ViewGroup
+import android.view.inputmethod.InputMethodManager
 import android.widget.Button
+import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -30,6 +33,7 @@ class MainActivity : Activity() {
 
     private var statusView: TextView? = null
     private var engineView: TextView? = null
+    private var keyboardButton: Button? = null
     private val density get() = resources.displayMetrics.density
     private fun dp(v: Int) = (v * density).toInt()
 
@@ -78,8 +82,32 @@ class MainActivity : Activity() {
         ).apply { bottomMargin = dp(6) })
         root.addView(statusView)
         root.addView(actionButton("Allow microphone") { requestMicPermission() })
-        root.addView(actionButton("Enable ColdVoice keyboard") { startActivity(Intent(Settings.ACTION_INPUT_METHOD_SETTINGS)) })
+        keyboardButton = actionButton("Enable ColdVoice keyboard") { onKeyboardButton() }
+        root.addView(keyboardButton)
         root.addView(actionButton("Enable ColdVoice flow bubble") { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) })
+
+        // A live field so the keyboard can actually be tried without leaving the app:
+        // focus it, switch to the ColdVoice keyboard, and dictate right here.
+        val tryLabel = TextView(this).apply {
+            text = "Try it here"
+            setTextColor(Color.parseColor("#7A7C82"))
+            textSize = 13f
+            setPadding(dp(2), dp(24), 0, dp(8))
+        }
+        val tryField = EditText(this).apply {
+            hint = "Tap here, switch to the ColdVoice keyboard, then dictate…"
+            setHintTextColor(Color.parseColor("#55585F"))
+            setTextColor(Color.WHITE)
+            textSize = 15f
+            background = card()
+            setPadding(dp(16), dp(16), dp(16), dp(16))
+            minLines = 2
+            gravity = Gravity.TOP or Gravity.START
+        }
+        root.addView(tryLabel)
+        root.addView(tryField, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+        ))
 
         scroll.addView(root)
         setContentView(scroll)
@@ -89,6 +117,30 @@ class MainActivity : Activity() {
         super.onResume()
         statusView?.text = setupStatus()
         engineView?.text = engineStatus()
+        // Once the keyboard is enabled in system settings, the button's job changes
+        // from "enable it" to "switch to it" so the user is never left at a dead end.
+        keyboardButton?.text =
+            if (keyboardEnabled()) "Switch to ColdVoice keyboard" else "Enable ColdVoice keyboard"
+    }
+
+    /** Step 1 opens system settings to enable it; step 2 pops the keyboard picker. */
+    private fun onKeyboardButton() {
+        if (keyboardEnabled()) {
+            (getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager)
+                .showInputMethodPicker()
+        } else {
+            startActivity(Intent(Settings.ACTION_INPUT_METHOD_SETTINGS))
+        }
+    }
+
+    private fun keyboardEnabled(): Boolean {
+        val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+        return imm.enabledInputMethodList.any { it.packageName == packageName }
+    }
+
+    private fun keyboardIsCurrent(): Boolean {
+        val id = Settings.Secure.getString(contentResolver, Settings.Secure.DEFAULT_INPUT_METHOD)
+        return id != null && id.startsWith("$packageName/")
     }
 
     private fun card(): GradientDrawable = GradientDrawable().apply {
@@ -141,13 +193,21 @@ class MainActivity : Activity() {
     private fun setupStatus(): String {
         val mic = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
         val speech = SpeechRecognizer.isRecognitionAvailable(this)
+        val kbEnabled = keyboardEnabled()
+        val kbCurrent = keyboardIsCurrent()
+        val kbLine = when {
+            kbCurrent -> "✓ ColdVoice keyboard active"
+            kbEnabled -> "• ColdVoice keyboard enabled — tap \"Switch to ColdVoice keyboard\" to use it"
+            else -> "• ColdVoice keyboard not enabled yet"
+        }
         return listOf(
             "${check(mic)} Microphone ${if (mic) "allowed" else "not allowed yet"}",
             "${check(speech)} On-device speech ${if (speech) "available" else "unavailable"}",
+            kbLine,
             "",
             "1. Allow the microphone.",
-            "2. Enable the ColdVoice keyboard, then switch to it from any text field.",
-            "3. Or enable the flow bubble to dictate into apps without switching keyboards."
+            "2. Enable the ColdVoice keyboard, then tap \"Switch to ColdVoice keyboard\" and pick it.",
+            "3. Focus the field below (or any text field) to dictate — or enable the flow bubble for any app."
         ).joinToString("\n")
     }
 }

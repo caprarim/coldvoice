@@ -41,6 +41,8 @@ CREATE TABLE IF NOT EXISTS transcripts (
   raw_text   TEXT,
   final_text TEXT,
   target_app TEXT,
+  word_count INTEGER DEFAULT 0,
+  duration_ms INTEGER DEFAULT 0,
   created_at TEXT DEFAULT (datetime('now'))
 );
 
@@ -52,14 +54,16 @@ CREATE TABLE IF NOT EXISTS app_rules (
   privacy_blocked INTEGER DEFAULT 0
 );
 
--- Default shortcut settings (approved changes baked in).
+-- Default settings. Two always-on shortcuts: Ctrl+1 hands-free toggle and
+-- Ctrl+CapsLock hold-to-dictate. Dictation history is stored locally by default
+-- so Home and Insights have data; it never leaves the device.
 INSERT OR IGNORE INTO settings (key, value) VALUES
-  ('shortcut.handsFreeHoldToDictate', 'Ctrl+1'),
-  ('shortcut.pasteLastTranscript',    'Middle Click'),
-  ('shortcut.pasteLastTranscriptAlt', 'Alt+Shift+Z'),
-  ('shortcut.cancel',                 'Esc'),
-  ('dictation.mode',                  'hold'),       -- 'hold' | 'toggle'
-  ('dictation.insertOnRelease',       '1'),
-  ('privacy.storeTranscripts',        '0'),
-  ('privacy.storeAudio',              '0'),
-  ('asr.model',                       'base.en');
+  ('shortcut.handsFreeToggle',  'Ctrl+1'),
+  ('shortcut.holdToDictate',    'Ctrl+CapsLock'),
+  ('shortcut.cancel',           'Esc'),
+  ('dictation.insertOnRelease', '1'),
+  ('dictation.showBarAlways',   '0'),
+  ('app.launchAtLogin',         '0'),
+  ('app.offlineMode',           '1'),
+  ('privacy.storeTranscripts',  '1'),
+  ('privacy.storeAudio',        '0');

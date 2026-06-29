@@ -1,42 +1,75 @@
 # android
 
-ColdVoice for Android (Kotlin). Build with Android Studio or Gradle.
+ColdVoice for Android — redesigned to feel and work like the Windows/Electron
+desktop app: a clean, blackish, minimal, developer-friendly UI and the same
+dictation flow (fast cloud polishing when online, fully offline when not).
 
-## Build (APK)
+## Build APK
 
-```
+```powershell
 cd apps/android
-./gradlew assembleDebug
+.\gradlew.bat assembleDebug
 ```
 
-The APK lands in `app/build/outputs/apk/debug/`. No Play Store setup required.
+The APK lands in `app/build/outputs/apk/debug/`. The website build
+(`apps/website`) picks this up automatically for the download link; the committed
+copy served by cold-voice.vercel.app is `apps/website/public/src/downloads/ColdVoice.apk`.
 
-## What's implemented
+JDK: any JDK 17. Android Studio's bundled JBR works
+(`JAVA_HOME=C:\Program Files\Android\Android Studio\jbr`).
 
-- **ColdVoice voice keyboard** (`ime/ColdVoiceImeService`): an `InputMethodService` with a
-  mic button. Tap to dictate → offline ASR → shared cleanup → `commitText` into the field.
-- **Insertion guard** (`input/InsertionGuard`): mirrors `packages/shared/input-detection`.
-  Rejects password / secure fields (IME `EditorInfo` and accessibility-node paths) and a
-  banking blocklist.
-- **Text pipeline** (`text/TextPipeline`): Kotlin port of the core cleanup steps
-  (whitespace, spoken punctuation, fillers, formatting, dictionary, snippets). Keep in
-  sync with the JS source of truth.
-- **Mic recorder** (`audio/MicRecorder`): 16 kHz mono PCM16 capture via `AudioRecord`
-  (`VOICE_RECOGNITION`). No audio persisted.
-- **Optional bubble** (`a11y/ColdVoiceBubbleService`): `AccessibilityService` that listens
-  only for focus/selection changes to show a side bubble beside editable, non-password
-  fields. Insert path uses `ACTION_SET_TEXT` on editable nodes only.
+## Architecture (mirrors the desktop app)
 
-## Integration points (marked `TODO` in code)
+The dictation engine and pill UI are shared by both entry points (the IME keyboard
+and the accessibility bubble), the same way the desktop pill is shared across the
+desktop app:
 
-- **sherpa-onnx**: add the Android library + model files under `filesDir/models/sherpa`,
-  then wire `asr/SherpaAsrEngine`. Until present, `isReady()` is false and the keyboard
-  shows setup instructions — never a cloud call. whisper.cpp/JNI is the fallback.
-- **Bubble overlay window**: `showBubble()/hideBubble()` add/remove a
-  `TYPE_ACCESSIBILITY_OVERLAY` window (tap = dictate, ✓ = insert, ✕ = cancel).
+| Mobile file | Desktop counterpart | Role |
+|---|---|---|
+| `dictation/DictationController.kt` | `main/main.js` (`handleDone`, `cloudReady`) | Picks cloud vs offline at start, drives states, falls back |
+| `asr/GroqClient.kt` | `main/groq.js` | Groq Whisper ASR + Llama cleanup, same free key/models |
+| `net/Connectivity.kt` | `main/net.js` | Online/offline auto-detection |
+| `data/Settings.kt` | `main/db.js` settings | `ai.enabled`, `ai.groqApiKey`, `dictation.developerMode` |
+| `audio/WavEncoder.kt` | `main/asr.js` (`wavBuffer`) | PCM16 → WAV for the upload |
+| `audio/MicRecorder.kt` | `renderer/recorder.js` | Raw mic capture + RMS level |
+| `ui/PillView.kt` + `ui/WaveformView.kt` | `renderer/pill.{html,css,js}` | The dark pill: cancel · waveform · confirm |
 
-## Not verified here
+### Dictation flow
 
-No Android SDK build was run in this environment. Sources are written to be idiomatic and
-compile-ready against AGP 8.5 / Kotlin 2.0, but treat the first `./gradlew assembleDebug`
-as the real check.
+`DictationController` snapshots the engine at the start of each utterance, exactly
+like the desktop session:
+
+- **Cloud** (online + AI enabled + key present, not forced-offline): record the
+  whole clip with `MicRecorder`, then on stop send one fast Groq Whisper request
+  and polish it with Groq Llama. Sub-second on the free tier.
+- **Offline** (no internet, or cloud disabled): the device's on-device
+  `SystemSpeechRecognizer` (PREFER_OFFLINE), cleaned by the deterministic
+  `TextPipeline`. Works with no connection.
+
+Both paths stream a 0..1 mic level so the pill waveform reacts to your voice, and
+both end by leaving the full transcript on the clipboard.
+
+The free Groq API key is the same one the desktop app ships with (see
+`data/Settings.kt`); it can be changed or cleared in code/preferences. All APIs
+used are free.
+
+## Entry points
+
+- `ime/ColdVoiceImeService`: the ColdVoice keyboard — dark panel with the pill and
+  a live online/engine indicator. Tap ✓ to dictate, ✕ to cancel.
+- `a11y/ColdVoiceBubbleService`: the floating **flow bubble**. Appears ONLY when an
+  editable, non-password field is focused and is hidden everywhere else. It is the
+  desktop pill (cancel · waveform · confirm), **draggable** anywhere on screen.
+- `MainActivity`: setup screen (mic permission, keyboard, bubble) styled to match
+  the desktop look, showing live connectivity + engine status.
+
+`asr/AsrEngine.kt` and `asr/SherpaAsrEngine.kt` remain as the future fully-offline
+custom-recognizer integration point; the active offline path is the on-device
+`SystemSpeechRecognizer`.
+
+## Required user setup on device
+
+1. Open ColdVoice.
+2. Allow microphone permission.
+3. Enable ColdVoice Keyboard in Android input settings, **or**
+4. Enable the ColdVoice flow bubble in Android accessibility settings.

@@ -74,7 +74,7 @@ function toBuffer(pcm16) {
   return Buffer.from(pcm16);
 }
 
-function writeWav(pcm16, sampleRate = 16000) {
+function wavBuffer(pcm16, sampleRate = 16000) {
   const data = toBuffer(pcm16);
   const header = Buffer.alloc(44);
   header.write('RIFF', 0);
@@ -90,8 +90,12 @@ function writeWav(pcm16, sampleRate = 16000) {
   header.writeUInt16LE(16, 34);
   header.write('data', 36);
   header.writeUInt32LE(data.length, 40);
+  return Buffer.concat([header, data]);
+}
+
+function writeWav(pcm16, sampleRate = 16000) {
   const file = path.join(os.tmpdir(), `coldvoice-${Date.now()}.wav`);
-  fs.writeFileSync(file, Buffer.concat([header, data]));
+  fs.writeFileSync(file, wavBuffer(pcm16, sampleRate));
   return file;
 }
 
@@ -100,7 +104,19 @@ function runWhisper(wavFile, modelName) {
     const bin = findBinary();
     const model = modelPath(modelName);
     if (!bin || !model) return reject(new Error(setupMessage(modelName)));
-    const args = ['-m', model, '-f', wavFile, '-nt', '-otxt', '-of', wavFile];
+    // Speed flags: use all CPU cores, greedy decode (beam size 1 / best-of 1),
+    // and no temperature fallback. These cut decode time ~2-3x with no model
+    // change and no loss for clean dictation audio.
+    const threads = Math.max(1, os.cpus().length);
+    const args = [
+      '-m', model,
+      '-f', wavFile,
+      '-t', String(threads),
+      '-bs', '1',
+      '-bo', '1',
+      '-nf',
+      '-nt', '-otxt', '-of', wavFile,
+    ];
     execFile(bin, args, { timeout: 120000 }, (err) => {
       if (err) return reject(err);
       const txtFile = `${wavFile}.txt`;
@@ -118,7 +134,9 @@ function runWhisper(wavFile, modelName) {
 function stripNonSpeech(text) {
   return String(text)
     .split(/\r?\n/)
-    .map((l) => l.replace(/\[[^\]]*\]/g, '').replace(/\((?:blank_audio|silence|inaudible|music|pause|noise)\)/gi, '').trim())
+    // Strip whisper's non-speech annotations: [BLANK_AUDIO], (music), (birds
+    // chirping), (wind blowing), etc. These are always fully bracketed/parenthesised.
+    .map((l) => l.replace(/\[[^\]]*\]/g, '').replace(/\([^)]*\)/g, '').trim())
     .filter(Boolean)
     .join(' ')
     .trim();
@@ -145,6 +163,7 @@ async function transcribe(pcm16, modelName = 'base.en', sampleRate = 16000) {
 
 module.exports = {
   transcribe,
+  wavBuffer,
   isReady,
   setupMessage,
   get MODELS_DIR() { return modelDirs()[0]; },

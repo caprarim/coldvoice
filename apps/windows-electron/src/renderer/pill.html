@@ -7,12 +7,21 @@
     <link rel="stylesheet" href="pill.css" />
   </head>
   <body>
-    <div class="pill" id="pill">
-      <button class="side cancel" id="cancel" title="Cancel (Esc)">✕</button>
+    <div class="pill" id="pill" data-state="recording">
+      <button class="side cancel" id="cancel" title="Cancel (Esc)">
+        <svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
+      </button>
       <div class="center" id="center">
-        <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+        <div class="bars" id="bars">
+          <span></span><span></span><span></span><span></span><span></span>
+          <span></span><span></span><span></span><span></span><span></span>
+          <span></span><span></span>
+        </div>
+        <div class="label" id="label"></div>
       </div>
-      <button class="side confirm" id="confirm" title="Insert">✓</button>
+      <button class="side confirm" id="confirm" title="Insert / stop">
+        <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+      </button>
     </div>
     <script src="pill.js"></script>
   </body>

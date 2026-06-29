@@ -9,16 +9,22 @@
   <body>
     <div class="app">
       <nav class="sidebar">
-        <div class="brand">ColdVoice</div>
-        <!-- EXACTLY 4 routes -->
-        <button class="nav-item active" data-route="home">Home</button>
-        <button class="nav-item" data-route="snippets">Snippets</button>
-        <button class="nav-item" data-route="dictionary">Dictionary</button>
-        <button class="nav-item" data-route="settings">Settings</button>
-        <div class="sidebar-foot">Offline · Private</div>
+        <div class="brand"><span class="brand-mark">CV</span> ColdVoice</div>
+        <div class="nav-group">
+          <button class="nav-item active" data-route="home" data-icon="home">Home</button>
+          <button class="nav-item" data-route="insights" data-icon="insights">Insights</button>
+          <button class="nav-item" data-route="dictionary" data-icon="dictionary">Dictionary</button>
+          <button class="nav-item" data-route="snippets" data-icon="snippets">Snippets</button>
+          <button class="nav-item" data-route="settings" data-icon="settings">Settings</button>
+          <button class="nav-item" data-route="account" data-icon="account">Account</button>
+        </div>
+        <div class="sidebar-foot" id="conn-foot">
+          <span class="dot-online" id="conn-dot"></span> <span id="conn-label">Private · on-device</span>
+        </div>
       </nav>
       <main id="view" class="view"></main>
     </div>
+    <div id="modal-root"></div>
     <script src="app.js"></script>
   </body>
 </html>

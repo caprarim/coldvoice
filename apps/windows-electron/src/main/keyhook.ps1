@@ -1,13 +1,26 @@
-param([string]$Vks = "", [int]$PollMs = 15)
+param([string]$Chords = "", [int]$PollMs = 12)
 
 # Low-level global key-state watcher for ColdVoice.
 # Electron's globalShortcut only fires on key-DOWN, so true hold-to-dictate
 # (start on press, stop on release) is impossible with it. This polls the
-# physical async state of the chord's virtual-key codes and prints "DOWN"/"UP"
-# transitions to stdout, which the main process reads. No key is swallowed.
+# physical async state of one or more chords (each a set of virtual-key codes)
+# and prints "DOWN:<id>" / "UP:<id>" transitions to stdout, which the main
+# process reads. No key is swallowed.
+#
+# -Chords format: "id:vk,vk;id:vk,vk"  e.g. "toggle:17,49;hold:17,20"
 
-$codes = @()
-foreach ($p in $Vks.Split(',')) { if ($p.Trim() -ne '') { $codes += [int]$p } }
+$defs = @()
+foreach ($chord in $Chords.Split(';')) {
+  if ($chord.Trim() -eq '') { continue }
+  $parts = $chord.Split(':')
+  if ($parts.Count -lt 2) { continue }
+  $id = $parts[0].Trim()
+  $codes = @()
+  foreach ($p in $parts[1].Split(',')) { if ($p.Trim() -ne '') { $codes += [int]$p } }
+  if ($codes.Count -gt 0) {
+    $defs += [pscustomobject]@{ Id = $id; Codes = $codes; Was = $false }
+  }
+}
 
 Add-Type @"
 using System;
@@ -17,16 +30,17 @@ public static class CVKey {
 }
 "@
 
-$was = $false
 while ($true) {
-  $all = $codes.Count -gt 0
-  foreach ($c in $codes) {
-    if (([CVKey]::GetAsyncKeyState($c) -band 0x8000) -eq 0) { $all = $false; break }
-  }
-  if ($all -ne $was) {
-    if ($all) { [Console]::Out.WriteLine("DOWN") } else { [Console]::Out.WriteLine("UP") }
-    [Console]::Out.Flush()
-    $was = $all
+  foreach ($d in $defs) {
+    $all = $true
+    foreach ($c in $d.Codes) {
+      if (([CVKey]::GetAsyncKeyState($c) -band 0x8000) -eq 0) { $all = $false; break }
+    }
+    if ($all -ne $d.Was) {
+      if ($all) { [Console]::Out.WriteLine("DOWN:" + $d.Id) } else { [Console]::Out.WriteLine("UP:" + $d.Id) }
+      [Console]::Out.Flush()
+      $d.Was = $all
+    }
   }
   Start-Sleep -Milliseconds $PollMs
 }

@@ -1,7 +1,17 @@
+import java.io.FileInputStream
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
 }
+
+// Groq key is read from the gitignored local.properties (or the GROQ_API_KEY env
+// var) at build time and exposed via BuildConfig — the secret never enters source.
+val groqApiKey: String = Properties().apply {
+    val f = rootProject.file("local.properties")
+    if (f.exists()) FileInputStream(f).use { load(it) }
+}.getProperty("GROQ_API_KEY") ?: System.getenv("GROQ_API_KEY") ?: ""
 
 android {
     namespace = "com.coldvoice"
@@ -11,8 +21,13 @@ android {
         applicationId = "com.coldvoice"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "0.0.1"
+        versionCode = 2
+        versionName = "0.1.0"
+        buildConfigField("String", "GROQ_API_KEY", "\"$groqApiKey\"")
+    }
+
+    buildFeatures {
+        buildConfig = true
     }
 
     buildTypes {

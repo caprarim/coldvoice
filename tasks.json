@@ -1,0 +1,29 @@
+{
+  "project": "ColdVoice",
+  "tasks": [
+    {
+      "agent": "bug-fix-auto-answer",
+      "task": "Investigate and fix the intermittent bug where dictating a question through ColdVoice sometimes causes it to be automatically answered instead of simply inserted as text. The issue is non-deterministic — it does not happen on every dictation, only sometimes. Trace the full flow from audio capture through ASR, text processing pipeline, and text insertion to identify where the question text might be interpreted as a command or trigger that causes an automatic response. Check the text-processing pipeline (packages/shared/text-processing/), the insertion logic (apps/windows-electron/src/main/insertion.js), the pill/UI event handling (apps/windows-electron/src/main/pill.js, src/renderer/pill.js), and any AI/cloud path logic (apps/windows-electron/src/main/asr.js) that might be intercepting question-shaped text and acting on it rather than passing it through as a plain string. Fix the root cause without changing intended behavior."
+    },
+    {
+      "agent": "website-ui-redesign",
+      "task": "Audit and redesign the UI of the ColdVoice marketing website (coldvoice.vercel.app — source in apps/website/public/src/). The goal is a clean, consistent layout throughout. Identify and fix spacing inconsistencies, oversized text, and areas with excessive padding or gaps. The content layout below the header is disliked and must be rethought — restructure it for better visual hierarchy and readability. The placement of the 'speech release' text is also wrong and must be repositioned to feel natural within the layout. The background color-changing effect concept is good but the current implementation is disliked — replace it with a better implementation that achieves the same idea (shifting background colors) in a more polished and intentional way, such as a smoother gradient transition, a subtle animated color shift, or section-based color blocks that feel designed rather than random. Do not touch the header section. Keep all changes within apps/website/public/src/ (index.html, styles.css, app.js, build.js).",
+      "actions": [
+        "Audit index.html and styles.css for large spacing values, oversized font sizes, and inconsistent padding or margin patterns.",
+        "Map every section below the header and identify layout, spacing, and text-size issues.",
+        "Redesign the content layout below the header for better visual hierarchy — fix structure, spacing, and text sizing to feel clean and intentional.",
+        "Identify the 'speech release' text element and reposition it to a logical, well-placed location within the layout.",
+        "Remove the current background color-changing implementation and replace it with a polished alternative — e.g. smooth CSS gradient animation, subtle hue-shift transition, or intentional section-based color blocks — that feels designed rather than jarring.",
+        "Ensure all styles remain consistent throughout the page in font choices, spacing scale, color usage, and component patterns.",
+        "Do not modify the header section or any functionality outside of layout and visual styling."
+      ],
+      "deliverables": [
+        "List of every spacing, text-size, and layout issue found with the element or selector responsible.",
+        "Redesigned content layout below the header applied directly to the source files.",
+        "Repositioned speech release text with explanation of new placement.",
+        "New background color-changing implementation applied, with a brief description of the approach chosen and why it is better than the original.",
+        "Confirmation that the header section was not modified."
+      ]
+    }
+  ]
+}

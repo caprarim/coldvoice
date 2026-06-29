@@ -20,11 +20,15 @@
   "build": {
     "appId": "com.coldvoice.app",
     "productName": "ColdVoice",
+    "icon": "icon.ico",
     "files": [
       "src/**/*",
       "../../packages/shared/**/*"
     ],
     "extraResources": [
+      { "from": "icon.ico", "to": "icon.ico" },
+      { "from": "icon.png", "to": "icon.png" },
+      { "from": "tray-icon.png", "to": "tray-icon.png" },
       {
         "from": "../../native/asr",
         "to": "native/asr",
@@ -37,8 +41,14 @@
       }
     ],
     "win": {
+      "icon": "icon.ico",
       "target": "nsis",
       "artifactName": "ColdVoice-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "installerIcon": "icon.ico",
+      "uninstallerIcon": "icon.ico",
+      "installerHeaderIcon": "icon.ico"
     }
   },
   "license": "MIT"

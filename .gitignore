@@ -1,10 +1,12 @@
 node_modules/
+.claude/settings.local.json
 .vercel/
 dist/
 build/
 out/
 *.log
 _pill*.png
+.tools/
 
 # Local ASR models are never committed.
 models/*
@@ -19,3 +21,7 @@ native/asr/*.dll
 *.sqlite
 *.sqlite3
 *.db
+
+# Android local config — holds SDK path and the build-time Groq key. Never commit.
+local.properties
+.gradle/

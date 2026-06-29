@@ -1,0 +1,183 @@
+Keep in mind these are the details I want for the website. However you should not copy paste them, change them a little so that it dosent look like its copy pasted. and dont lie about anything. and make them more accurate to my actual product.
+# BridgeVoice
+
+## Built to Vibe Code Hands-Free
+
+Speak instead of type. On-device Whisper for privacy, cloud Whisper for 99+ languages — every detail tuned for builders who ship fast.
+
+---
+
+## Universal Text Injection
+
+Your words land in whatever app has focus — editor, terminal, Slack, browser. One voice layer across your whole desktop.
+
+## Local or Cloud — You Choose
+
+On-device Whisper for private, offline English. Or cloud Groq Whisper for 99+ languages with auto-detect. Your call.
+
+## Push-to-Talk & Toggle
+
+Hold to dictate or toggle hands-free. Fully customizable global hotkeys — your flow, your way.
+
+## Sub-Second Transcription
+
+Recording starts in under 10ms. Speech to text in under a second — local or cloud.
+
+## Custom Developer Dictionary
+
+Teach BridgeVoice your stack. Map spoken phrases to exact terms, product names, and casing that standard Whisper would miss.
+
+| Spoken Phrase | Replacement  |
+| ------------- | ------------ |
+| "Bridge mind" | `BridgeMind` |
+| "use effect"  | `useEffect`  |
+| "Tauri two"   | `Tauri v2`   |
+
+## Usage Stats & History
+
+Every transcription is saved locally. Track words, speaking time, and WPM — recopy anything in one click.
+
+---
+
+# Works Everywhere
+
+Your voice, in every app you ship with.
+
+BridgeVoice isn't locked to one editor. It's a global voice layer — drop text into Cursor, your terminal, Slack, or the browser without breaking flow.
+
+### Prompt Your Agents by Voice
+
+Speak prompts straight into Cursor or your agent — describe what to build and let it ship.
+
+### Write Commits, Docs & Messages
+
+PR descriptions, Slack replies, docs, and emails — spoken into the app you are already in.
+
+### Accessible by Design
+
+An ergonomic alternative to keyboard-heavy workflows for builders with RSI or carpal tunnel.
+
+### Offline & Multilingual
+
+Local mode runs fully offline. Cloud mode unlocks 99+ languages with auto-detect.
+
+---
+
+# 100% Private
+
+* No audio leaves your machine.
+* 6 Whisper models, from Tiny to Large-v3.
+* Recording latency under 10ms.
+* Powered by a native C++ core via `whisper.cpp`.
+
+---
+
+# Private. Instant. On Your Machine.
+
+Most dictation tools ship your voice to the cloud — adding latency and risk. BridgeVoice runs the hyper-optimized `whisper.cpp` engine natively for instant, private transcription.
+
+* Native OS integration via Tauri 2.0
+* Hardware-accelerated inference where available
+* Works completely offline without Wi-Fi
+* Cross-platform: macOS, Windows, Linux
+
+---
+
+# Frequently Asked Questions
+
+### What is BridgeVoice?
+
+A native desktop dictation app built with Tauri 2.0 and Rust. Local mode runs Whisper AI on-device; cloud mode uses Groq Whisper for 99+ languages. Text is injected into whatever app has focus.
+
+### Is my voice data actually private?
+
+In local mode, yes — all audio is processed on-device via `whisper.cpp`. No data leaves your machine. Cloud mode encrypts audio over HTTPS to the BridgeMind API. You choose.
+
+### How do I get access to BridgeVoice?
+
+Included with BridgeMind Pro ($50/month or $40/month annually). Pro unlocks BridgeVoice, BridgeMemory, BridgeMCP, BridgeSpace, premium skills, and the full prompt library.
+
+### What platforms does it run on?
+
+macOS, Windows, and Linux. Built with Tauri 2.0 and Rust. macOS builds are code-signed and notarized.
+
+### Which Whisper models are available?
+
+Local mode offers six models, from Tiny (75 MB) to Large-v3 (3.1 GB). Cloud mode uses Groq Whisper Large-v3-Turbo for 99+ languages.
+
+### Do I need special hardware?
+
+No. BridgeVoice works with any microphone, including built-in laptop mics. A quality headset provides the best experience.
+
+### What languages does BridgeVoice support?
+
+Local mode supports offline English. Cloud mode supports 99+ languages with automatic detection via Groq Whisper.
+
+---
+
+# Get BridgeVoice
+
+BridgeVoice is included with Pro and Ultra — the complete agentic coding suite.
+
+Cloud transcription with 99+ languages requires Pro or Ultra.
+
+## Monthly
+
+### Basic — $20/mo
+
+**$16/mo annually (Save 20%)**
+
+* BridgeMind account access
+* BridgeSpace (ADE)
+* Multi-agent swarms
+* Bridge Assistant
+* 5,000 credits/month
+* Email support
+
+**Get Started**
+
+---
+
+### Pro — Most Popular
+
+**$50/mo**
+**$40/mo annually (Save 20%)**
+
+Everything in Basic, plus:
+
+* BridgeMemory (Live)
+* BridgeMCP
+* BridgeVoice
+* 12,500 credits/month
+* Priority support
+* Early access
+
+**Get Started**
+
+---
+
+### Ultra
+
+**$100/mo**
+**$80/mo annually (Save 20%)**
+
+Everything in Pro, plus:
+
+* 25,000 credits/month
+* Highest AI usage ceilings
+* Priority AI model routing
+* Dedicated support
+* Team seats (coming soon)
+
+**Get Ultra**
+
+---
+
+
+---
+
+# Ready to vibe code hands-free?
+
+BridgeVoice is included with Pro and Ultra.
+
+Unlock voice-to-code, BridgeMemory, BridgeMCP, premium skills, and more.

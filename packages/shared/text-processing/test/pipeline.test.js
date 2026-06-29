@@ -26,3 +26,8 @@ test('app scope selects professional style', () => {
   const out = process('I am gonna send it', { appId: 'Gmail' });
   assert.strictEqual(out, 'I am going to send it');
 });
+
+test('dictated questions stay as questions', () => {
+  const out = process('what is the capital of france question mark');
+  assert.strictEqual(out, 'What is the capital of france?');
+});

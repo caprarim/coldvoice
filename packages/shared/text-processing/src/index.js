@@ -6,6 +6,7 @@ module.exports = {
   ...require('./fillers'),
   ...require('./backtracking'),
   ...require('./formatting'),
+  ...require('./dev-terms'),
   ...require('./dictionary'),
   ...require('./snippets'),
   ...require('./style'),

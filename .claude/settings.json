@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(node_modules/**)",
+      "Read(models/**)",
+      "Read(apps/android/.gradle/**)",
+      "Read(apps/android/**/build/**)",
+      "Read(apps/windows-electron/dist/**)",
+      "Read(dist/**)",
+      "Read(build/**)",
+      "Read(out/**)",
+      "Read(.vercel/**)",
+      "Read(verification/**)",
+      "Read(ui_wants/**)",
+      "Read(uiwantswebsite/**)"
+    ]
+  }
+}

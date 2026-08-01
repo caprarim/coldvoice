@@ -14,6 +14,9 @@ const { log } = require('./log');
 
 let proc = null;
 let handlers = { onDown() {}, onUp() {} };
+let lastChords = [];
+let restartTimer = null;
+let intentionalStop = false;
 
 // Map an Electron-style accelerator token to a Windows virtual-key code.
 const NAMED = {
@@ -45,6 +48,8 @@ function parseAccel(accel) {
 }
 
 function stop() {
+  intentionalStop = true;
+  if (restartTimer) { clearTimeout(restartTimer); restartTimer = null; }
   if (proc) {
     try { proc.kill(); } catch { /* ignore */ }
     proc = null;
@@ -69,10 +74,17 @@ function scriptPath(name) {
 // chords: array of { id, accel }  e.g. [{id:'toggle',accel:'Ctrl+1'},{id:'hold',accel:'Ctrl+CapsLock'}]
 // h: { onDown(id), onUp(id) }
 function start(chords, h) {
-  stop();
+  intentionalStop = true;
+  if (restartTimer) { clearTimeout(restartTimer); restartTimer = null; }
+  if (proc) {
+    try { proc.kill(); } catch { /* ignore */ }
+    proc = null;
+  }
+  intentionalStop = false;
   handlers = h || handlers;
+  lastChords = Array.isArray(chords) ? chords.slice() : [];
   const specs = [];
-  for (const c of chords || []) {
+  for (const c of lastChords) {
     const vks = parseAccel(c.accel);
     if (vks.length) specs.push(`${c.id}:${vks.join(',')}`);
     else log(`keyhook: could not parse accelerator "${c.accel}" for ${c.id}`);
@@ -102,7 +114,16 @@ function start(chords, h) {
     }
   });
   proc.stderr.on('data', (d) => log('keyhook stderr:', d.toString().trim()));
-  proc.on('exit', (code) => log(`keyhook exited (${code})`));
+  proc.on('exit', (code) => {
+    log(`keyhook exited (${code})`);
+    proc = null;
+    if (intentionalStop) return;
+    // PowerShell helper can die under memory pressure; restart so hotkeys keep working.
+    restartTimer = setTimeout(() => {
+      restartTimer = null;
+      if (!intentionalStop && lastChords.length) start(lastChords, handlers);
+    }, 800);
+  });
   log(`keyhook started for chords [${specs.join(' ; ')}]`);
 }
 

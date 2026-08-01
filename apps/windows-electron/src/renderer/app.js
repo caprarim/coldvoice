@@ -170,10 +170,10 @@ function gauge(value, max) {
   const dash = `${(circ * pct).toFixed(1)} ${circ.toFixed(1)}`;
   return el('div', { class: 'gauge', html:
     `<svg width="128" height="78" viewBox="0 0 128 78">
-       <path d="M12 64 A52 52 0 0 1 116 64" fill="none" stroke="#ece9e1" stroke-width="12" stroke-linecap="round"/>
-       <path d="M12 64 A52 52 0 0 1 116 64" fill="none" stroke="#16604f" stroke-width="12" stroke-linecap="round" stroke-dasharray="${dash}"/>
-       <text x="64" y="56" text-anchor="middle" font-size="22" font-weight="650" fill="#1b1c1f">${value}</text>
-       <text x="64" y="72" text-anchor="middle" font-size="10" fill="#6c6f76">WPM</text>
+       <path d="M12 64 A52 52 0 0 1 116 64" fill="none" stroke="#23252e" stroke-width="12" stroke-linecap="round"/>
+       <path d="M12 64 A52 52 0 0 1 116 64" fill="none" stroke="#35d39b" stroke-width="12" stroke-linecap="round" stroke-dasharray="${dash}"/>
+       <text x="64" y="56" text-anchor="middle" font-size="22" font-weight="650" fill="#edeef2">${value}</text>
+       <text x="64" y="72" text-anchor="middle" font-size="10" fill="#9aa0ac">WPM</text>
      </svg>` });
 }
 
@@ -369,6 +369,8 @@ routes.settings = async () => {
   p.appendChild(section('Shortcuts', [
     shortcutRow('Hands-free toggle', 'shortcut.handsFreeToggle', s['shortcut.handsFreeToggle'] || 'Ctrl+1', 'Tap to start, tap again to stop.'),
     shortcutRow('Hold to dictate', 'shortcut.holdToDictate', s['shortcut.holdToDictate'] || 'Ctrl+CapsLock', 'Hold to record, release to insert.'),
+    shortcutRow('Paste last transcript', 'shortcut.pasteLastTranscriptAlt', s['shortcut.pasteLastTranscriptAlt'] || 'Alt+Shift+Z', 'Also middle-click. Left-click pastes in terminals.'),
+    optionalShortcutRow('Pause / resume', 'shortcut.pauseResume', s['shortcut.pauseResume'] || '', 'Holds the dictation, then picks up where you left off. Unset until you choose keys.'),
     staticRow('Cancel', 'Esc', 'While the bar is up.'),
   ]));
 
@@ -377,6 +379,7 @@ routes.settings = async () => {
     toggleRow('Insert when I release / confirm', 'dictation.insertOnRelease', s['dictation.insertOnRelease'] === '1', 'Otherwise the text is just copied to the clipboard.'),
     toggleRow('Show the ColdVoice bar at all times', 'dictation.showBarAlways', s['dictation.showBarAlways'] === '1', 'Keep a small idle bar on screen, Flow-style.'),
     toggleRow('Developer mode', 'dictation.developerMode', s['dictation.developerMode'] !== '0', 'Auto-cases tech terms (Next.js, IPC) and tags filenames like @helper.swift.'),
+    toneRow(s),
   ]));
 
   // AI grammar (Groq cloud). Falls back to the offline pipeline when off/offline.
@@ -413,6 +416,30 @@ function toggleRow(label, key, checked, desc) {
   return el('div', { class: 'set-row' }, [
     el('div', { class: 'lab' }, [el('div', { text: label }), desc ? el('div', { class: 'desc', text: desc }) : null]),
     el('div', { class: 'right' }, [toggle(checked, (v) => cv.invoke('db:setSetting', { key, value: v ? '1' : '0' }))]),
+  ]);
+}
+function toneRow(settings) {
+  const current = settings['dictation.tone'] || 'auto';
+  const select = el('select', { class: 'field tone-select' });
+  for (const [value, label] of [
+    ['auto', 'Auto (match the app)'],
+    ['default', 'Neutral'],
+    ['casual', 'Casual'],
+    ['professional', 'Professional'],
+  ]) {
+    const opt = el('option', { value, text: label });
+    if (value === current) opt.selected = true;
+    select.appendChild(opt);
+  }
+  select.addEventListener('change', () => {
+    cv.invoke('db:setSetting', { key: 'dictation.tone', value: select.value });
+  });
+  return el('div', { class: 'set-row' }, [
+    el('div', { class: 'lab' }, [
+      el('div', { text: 'Tone' }),
+      el('div', { class: 'desc', text: 'How dictations read: casual keeps it relaxed, professional cleans up slang. Auto picks per app.' }),
+    ]),
+    el('div', { class: 'right' }, [select]),
   ]);
 }
 function staticRow(label, value, desc) {
@@ -527,32 +554,129 @@ async function verifyMicrophone(deviceId) {
   if (!ok) throw new Error('That microphone did not start.');
 }
 
+// --- live mic testing area ---------------------------------------------------
+// While the microphone modal is open, every listed input holds its own capture
+// stream + analyser so each row shows a real, flowing level meter. The list
+// re-renders on devicechange, so plugging/unplugging updates it live. All
+// streams are torn down the moment the modal closes.
+let micMeterEngine = null;
+
+function releaseMeterEntries(engine) {
+  for (const entry of engine.entries) {
+    try { entry.source.disconnect(); } catch { /* ignore */ }
+    try { entry.stream.getTracks().forEach((track) => track.stop()); } catch { /* ignore */ }
+  }
+  engine.entries = [];
+}
+
+function stopMicMeters() {
+  const engine = micMeterEngine;
+  micMeterEngine = null;
+  if (!engine) return;
+  engine.closed = true;
+  if (engine.raf) cancelAnimationFrame(engine.raf);
+  if (engine.refreshTimer) clearTimeout(engine.refreshTimer);
+  navigator.mediaDevices.removeEventListener('devicechange', engine.onChange);
+  releaseMeterEntries(engine);
+  try { if (engine.ctx) engine.ctx.close(); } catch { /* ignore */ }
+}
+
 function closeMicrophoneModal() {
+  stopMicMeters();
   modalRoot.innerHTML = '';
 }
 
-function renderMicrophoneOptions(container, devices, settings) {
+async function attachMeter(engine, deviceId, meterEl, onDead) {
+  // Raw signal (no processing) so the bars reflect the true input level.
+  const audio = { echoCancellation: false, noiseSuppression: false, autoGainControl: false };
+  if (deviceId) audio.deviceId = { exact: deviceId };
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio });
+  } catch {
+    if (!engine.closed && onDead) onDead();
+    return;
+  }
+  if (engine.closed) {
+    stream.getTracks().forEach((track) => track.stop());
+    return;
+  }
+  if (!engine.ctx) engine.ctx = new AudioContext();
+  const source = engine.ctx.createMediaStreamSource(stream);
+  const analyser = engine.ctx.createAnalyser();
+  analyser.fftSize = 512;
+  source.connect(analyser);
+  engine.entries.push({ stream, source, analyser, data: new Float32Array(analyser.fftSize), meterEl });
+}
+
+function runMeterLoop(engine) {
+  const tick = () => {
+    if (engine.closed) return;
+    for (const entry of engine.entries) {
+      entry.analyser.getFloatTimeDomainData(entry.data);
+      let sum = 0;
+      for (let i = 0; i < entry.data.length; i++) sum += entry.data[i] * entry.data[i];
+      const rms = Math.sqrt(sum / entry.data.length);
+      const live = entry.stream.getAudioTracks().some((track) => track.readyState === 'live');
+      const level = live ? Math.min(1, Math.pow(rms * 9, 0.6)) : 0;
+      const bars = entry.meterEl.children;
+      // At least one bar stays lit while the mic is alive, so a silent-but-
+      // working mic still reads as connected.
+      const lit = live ? Math.max(1, Math.round(level * bars.length)) : 0;
+      for (let i = 0; i < bars.length; i++) {
+        bars[i].classList.toggle('on', bars.length - i <= lit);
+      }
+    }
+    engine.raf = requestAnimationFrame(tick);
+  };
+  engine.raf = requestAnimationFrame(tick);
+}
+
+function renderMicNotReady(container, message) {
+  container.innerHTML = '';
+  container.appendChild(el('div', { class: 'mic-notready' }, [
+    el('div', { class: 'mic-notready-icon', html: ICON.mic }),
+    el('div', { class: 'mic-notready-title', text: 'Mic is not ready' }),
+    el('div', { class: 'mic-notready-sub', text: message }),
+    el('button', {
+      class: 'btn mic-sound-btn',
+      type: 'button',
+      onclick: () => cv.invoke('app:openSoundSettings'),
+    }, 'Open Sound Settings'),
+  ]));
+}
+
+function renderMicrophoneOptions(container, devices, settings, engine) {
   const selected = settings['dictation.microphoneDeviceId'] || '';
   const options = [
-    { id: '', label: 'Auto-detect', sub: 'From computer settings', selected: !selected, meter: true },
+    { id: '', label: 'Auto-detect', sub: 'From computer settings', selected: !selected },
     ...devices.map((device, index) => ({
       id: device.deviceId,
       label: deviceName(device, index),
       sub: '',
       selected: selected === device.deviceId,
-      meter: false,
     })),
   ];
 
   container.innerHTML = '';
+  releaseMeterEntries(engine);
   for (const option of options) {
+    const meter = el('span', { class: 'mic-meter', html: '<i></i><i></i><i></i><i></i><i></i><i></i>' });
+    const sub = el('span', { class: 'mic-sub', text: option.sub || '' });
+    if (!option.sub) sub.style.display = 'none';
     const btn = el('button', { class: `mic-option${option.selected ? ' selected' : ''}`, type: 'button' }, [
       el('span', { class: 'mic-copy' }, [
         el('span', { class: 'mic-title', text: option.label }),
-        option.sub ? el('span', { class: 'mic-sub', text: option.sub }) : null,
+        sub,
       ]),
-      option.meter ? el('span', { class: 'mic-meter', html: '<i></i><i></i><i></i><i></i><i></i><i></i>' }) : null,
+      meter,
     ]);
+    attachMeter(engine, option.id, meter, () => {
+      btn.classList.add('unavailable');
+      sub.textContent = 'Not available right now';
+      sub.classList.add('mic-err');
+      sub.style.display = '';
+    });
     btn.addEventListener('click', async () => {
       try {
         await verifyMicrophone(option.id);
@@ -560,17 +684,37 @@ function renderMicrophoneOptions(container, devices, settings) {
         await cv.invoke('db:setSetting', { key: 'dictation.microphoneLabel', value: option.label });
         closeMicrophoneModal();
         navigate('settings');
-      } catch (err) {
-        container.innerHTML = '';
-        container.appendChild(el('div', { class: 'mic-empty', text: String(err && err.message ? err.message : err) }));
+      } catch {
+        sub.textContent = 'This microphone did not start. Check it in Sound settings.';
+        sub.classList.add('mic-err');
+        sub.style.display = '';
       }
     });
     container.appendChild(btn);
   }
 }
 
+async function refreshMicModal(list, engine) {
+  if (engine.closed) return;
+  const gen = ++engine.gen;
+  try {
+    const [devices, settings] = await Promise.all([listMicrophones(), cv.invoke('db:getSettings')]);
+    if (engine.closed || gen !== engine.gen) return;
+    if (!devices.length) {
+      releaseMeterEntries(engine);
+      renderMicNotReady(list, 'No microphone was detected. Plug one in, or pick a different input in Windows Sound settings.');
+      return;
+    }
+    renderMicrophoneOptions(list, devices, settings, engine);
+  } catch {
+    if (engine.closed || gen !== engine.gen) return;
+    releaseMeterEntries(engine);
+    renderMicNotReady(list, 'Your microphone is not connected or could not start. Reconnect it, or choose another input in Windows Sound settings.');
+  }
+}
+
 function openMicrophoneModal() {
-  modalRoot.innerHTML = '';
+  closeMicrophoneModal();
   const list = el('div', { class: 'mic-list' }, [el('div', { class: 'mic-empty', text: 'Detecting microphones...' })]);
   const backdrop = el('div', { class: 'modal-backdrop mic-backdrop', onclick: (e) => { if (e.target === backdrop) closeMicrophoneModal(); } }, [
     el('div', { class: 'mic-modal' }, [
@@ -583,20 +727,60 @@ function openMicrophoneModal() {
     ]),
   ]);
   modalRoot.appendChild(backdrop);
-  Promise.all([listMicrophones(), cv.invoke('db:getSettings')])
-    .then(([devices, settings]) => {
-      if (!devices.length) {
-        list.innerHTML = '';
-        list.appendChild(el('div', { class: 'mic-empty', text: 'No microphones detected.' }));
-        return;
-      }
-      renderMicrophoneOptions(list, devices, settings);
-    })
-    .catch((err) => {
-      list.innerHTML = '';
-      list.appendChild(el('div', { class: 'mic-empty', text: String(err && err.message ? err.message : err) }));
-    });
+
+  const engine = { ctx: null, entries: [], closed: false, raf: 0, gen: 0, refreshTimer: null, onChange: null };
+  engine.onChange = () => {
+    // Debounced: a flaky mic fires devicechange in bursts.
+    if (engine.refreshTimer) clearTimeout(engine.refreshTimer);
+    engine.refreshTimer = setTimeout(() => {
+      engine.refreshTimer = null;
+      refreshMicModal(list, engine);
+    }, 300);
+  };
+  micMeterEngine = engine;
+  navigator.mediaDevices.addEventListener('devicechange', engine.onChange);
+  runMeterLoop(engine);
+  refreshMicModal(list, engine);
 }
+
+// --- automatic "Mic is not ready" modal --------------------------------------
+// Shown when the mic drops (pushed from the main process, already debounced so
+// a flapping mic doesn't flash it) and auto-dismissed the moment it is back.
+function openMicNotReadyModal() {
+  if (modalRoot.querySelector('.micready-backdrop')) return;
+  if (modalRoot.childElementCount) return; // never stomp another open modal
+  const close = () => { modalRoot.innerHTML = ''; };
+  const backdrop = el('div', { class: 'modal-backdrop mic-backdrop micready-backdrop', onclick: (e) => { if (e.target === backdrop) close(); } }, [
+    el('div', { class: 'mic-modal mic-modal-slim' }, [
+      el('div', { class: 'mic-head' }, [
+        el('h3', { text: 'Mic is not ready' }),
+        el('button', { class: 'mic-close', onclick: close }, 'x'),
+      ]),
+      el('div', { class: 'mic-notready' }, [
+        el('div', { class: 'mic-notready-icon', html: ICON.mic }),
+        el('div', { class: 'mic-notready-sub', text: 'Your microphone is not connected or could not start. Reconnect it, or choose another input in Windows Sound settings.' }),
+        el('button', {
+          class: 'btn mic-sound-btn',
+          type: 'button',
+          onclick: () => cv.invoke('app:openSoundSettings'),
+        }, 'Open Sound Settings'),
+      ]),
+    ]),
+  ]);
+  modalRoot.appendChild(backdrop);
+}
+
+cv.on('mic:status', (st) => {
+  if (!st) return;
+  if (!st.connected) {
+    openMicNotReadyModal();
+    return;
+  }
+  if (modalRoot.querySelector('.micready-backdrop')) modalRoot.innerHTML = '';
+});
+cv.invoke('mic:status')
+  .then((st) => { if (st && !st.connected) openMicNotReadyModal(); })
+  .catch(() => {});
 function shortcutRow(label, key, value, desc) {
   const keysSpan = el('span', { class: 'keys', text: value || '—' });
   const editBtn = iconBtn('edit', 'Rebind', async () => {
@@ -606,6 +790,23 @@ function shortcutRow(label, key, value, desc) {
   return el('div', { class: 'set-row' }, [
     el('div', { class: 'lab' }, [el('div', { text: label }), desc ? el('div', { class: 'desc', text: desc }) : null]),
     el('div', { class: 'right' }, [keysSpan, editBtn]),
+  ]);
+}
+// A shortcut that ships unbound. Same rebind flow, plus a clear button so the
+// user can hand the keys back and switch pausing off again.
+function optionalShortcutRow(label, key, value, desc) {
+  const keysSpan = el('span', { class: 'keys', text: value || 'Not set' });
+  const editBtn = iconBtn('edit', 'Set shortcut', async () => {
+    const next = await captureShortcut(keysSpan);
+    if (next) { keysSpan.textContent = next; await cv.invoke('db:setSetting', { key, value: next }); }
+  });
+  const clearBtn = iconBtn('close', 'Clear shortcut', async () => {
+    keysSpan.textContent = 'Not set';
+    await cv.invoke('db:setSetting', { key, value: '' });
+  });
+  return el('div', { class: 'set-row' }, [
+    el('div', { class: 'lab' }, [el('div', { text: label }), desc ? el('div', { class: 'desc', text: desc }) : null]),
+    el('div', { class: 'right' }, [keysSpan, editBtn, clearBtn]),
   ]);
 }
 function captureShortcut(target) {
@@ -740,5 +941,94 @@ cv.invoke('app:isOnline').then((r) => setConnectivity(!!(r && r.online))).catch(
 // Reset per-page connectivity subscribers when navigating away.
 const _navigate = navigate;
 navigate = function (route) { connListeners.length = 0; return _navigate(route); };
+
+const updBtn = document.getElementById('sb-update-btn');
+if (updBtn) {
+  let updPhase = 'idle';
+  let updLatest = null;
+
+  const updBusy = (busy) => updBtn.classList.toggle('sb-update--busy', busy);
+  const updAvail = (on) => updBtn.classList.toggle('sb-update--available', on);
+
+  cv.on('update:progress', (p) => {
+    if (updPhase !== 'downloading' || !p) return;
+    if (p.total > 0) {
+      const pct = Math.min(99, Math.round((p.received / p.total) * 100));
+      updBtn.title = `Downloading v${updLatest} in the background: ${pct}%. Keep using ColdVoice.`;
+    } else {
+      updBtn.title = `Downloading v${updLatest} in the background: ${Math.round(p.received / 1048576)} MB so far. Keep using ColdVoice.`;
+    }
+  });
+
+  async function updDownload() {
+    updPhase = 'downloading';
+    updBusy(true);
+    updAvail(true);
+    updBtn.textContent = 'New update available';
+    updBtn.title = `Downloading v${updLatest} in the background. Keep using ColdVoice.`;
+    let result = null;
+    try { result = await cv.invoke('update:download'); } catch { }
+    updBusy(false);
+    if (!result || result.error) {
+      updPhase = 'available';
+      updAvail(true);
+      updBtn.textContent = 'New update available';
+      updBtn.title = (result && result.error) || 'Download failed. Click to try again.';
+      return;
+    }
+    updPhase = 'ready';
+    updAvail(true);
+    updBtn.textContent = 'Restart to update';
+    updBtn.title = `v${updLatest} is ready. Click to restart ColdVoice on the new version.`;
+  }
+
+  async function updInstall() {
+    updPhase = 'installing';
+    updBusy(true);
+    updBtn.textContent = 'Restarting';
+    updBtn.title = 'ColdVoice is closing to finish the update. It reopens by itself.';
+    let result = null;
+    try { result = await cv.invoke('update:install'); } catch { }
+    if (!result || result.error) {
+      updPhase = 'ready';
+      updBusy(false);
+      updAvail(true);
+      updBtn.textContent = 'Restart to update';
+      updBtn.title = (result && result.error) || 'Update failed. Click to try again.';
+    }
+  }
+
+  async function updCheck(manual) {
+    updPhase = 'checking';
+    updBusy(true);
+    updAvail(false);
+    updBtn.textContent = manual ? 'Checking' : 'Checking for updates';
+    let result = null;
+    try { result = await cv.invoke('update:check'); } catch { }
+    updBusy(false);
+    const current = result && result.current ? result.current : '';
+    if (result && result.ok && result.updateAvailable) {
+      updLatest = result.latest;
+      updDownload();
+    } else if (result && result.ok) {
+      updPhase = 'idle';
+      updBtn.textContent = `Up to date v${current}`;
+      updBtn.title = 'You are on the latest version. Click to check again.';
+    } else {
+      updPhase = 'idle';
+      updBtn.textContent = 'Update check failed';
+      updBtn.title = 'Could not reach the update server. Click to try again.';
+    }
+  }
+
+  updBtn.addEventListener('click', () => {
+    if (updPhase === 'checking' || updPhase === 'downloading' || updPhase === 'installing') return;
+    if (updPhase === 'ready') { updInstall(); return; }
+    if (updPhase === 'available') { updDownload(); return; }
+    updCheck(true);
+  });
+
+  updCheck(false);
+}
 
 navigate('home');

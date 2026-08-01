@@ -5,7 +5,11 @@
 const fs = require('fs');
 const path = require('path');
 
-const file = path.join(__dirname, '..', '..', '_debug.log');
+let file = path.join(__dirname, '..', '..', '_debug.log');
+try {
+  const { app } = require('electron');
+  if (app && app.isPackaged) file = path.join(app.getPath('userData'), '_debug.log');
+} catch {}
 
 function log(...args) {
   try {

@@ -30,16 +30,32 @@ public static class CVKey {
 }
 "@
 
+# Every virtual-key code keyhook.js's tokenToVk() can produce, so a chord match
+# can require an EXACT key set, not just "these keys happen to be down". Without
+# this, "Ctrl+1" also fired on "Ctrl+Shift+1" (extra Shift ignored) and on
+# "Ctrl+2" (rollover/ghosting reporting an extra key down alongside the real one).
+$monitored = New-Object System.Collections.Generic.List[int]
+foreach ($v in 0x11,0x12,0x10,0x14,0x20,0x0d,0x09,0x1b) { $monitored.Add($v) }
+for ($i = 0x30; $i -le 0x39; $i++) { $monitored.Add($i) }
+for ($i = 0x41; $i -le 0x5A; $i++) { $monitored.Add($i) }
+for ($i = 0x70; $i -le 0x87; $i++) { $monitored.Add($i) }
+
 while ($true) {
+  $down = New-Object System.Collections.Generic.HashSet[int]
+  foreach ($m in $monitored) {
+    if (([CVKey]::GetAsyncKeyState($m) -band 0x8000) -ne 0) { [void]$down.Add($m) }
+  }
   foreach ($d in $defs) {
-    $all = $true
-    foreach ($c in $d.Codes) {
-      if (([CVKey]::GetAsyncKeyState($c) -band 0x8000) -eq 0) { $all = $false; break }
+    $match = $down.Count -eq $d.Codes.Count
+    if ($match) {
+      foreach ($c in $d.Codes) {
+        if (-not $down.Contains($c)) { $match = $false; break }
+      }
     }
-    if ($all -ne $d.Was) {
-      if ($all) { [Console]::Out.WriteLine("DOWN:" + $d.Id) } else { [Console]::Out.WriteLine("UP:" + $d.Id) }
+    if ($match -ne $d.Was) {
+      if ($match) { [Console]::Out.WriteLine("DOWN:" + $d.Id) } else { [Console]::Out.WriteLine("UP:" + $d.Id) }
       [Console]::Out.Flush()
-      $d.Was = $all
+      $d.Was = $match
     }
   }
   Start-Sleep -Milliseconds $PollMs

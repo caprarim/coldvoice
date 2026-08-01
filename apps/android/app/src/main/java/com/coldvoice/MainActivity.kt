@@ -8,9 +8,11 @@ import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
-import android.speech.SpeechRecognizer
+import android.text.TextUtils
 import android.view.Gravity
 import android.view.ViewGroup
 import android.view.inputmethod.InputMethodManager
@@ -21,19 +23,26 @@ import android.widget.ScrollView
 import android.widget.TextView
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import com.coldvoice.a11y.ColdVoiceBubbleService
 import com.coldvoice.data.Settings as CvSettings
 import com.coldvoice.net.Connectivity
 
 /**
- * Setup screen. Styled to match the desktop ColdVoice look — clean, blackish,
- * minimal, developer-friendly — and surfaces the live engine status (mic,
- * on-device speech, connectivity, and whether the fast cloud path is active).
+ * Setup screen. ColdVoice on Android is a floating bubble, not a keyboard — the
+ * user keeps whatever keyboard they already use, and the bubble appears at the
+ * right edge whenever a text field has focus.
+ *
+ * Everything ColdVoice needs is requested here, in the order Android will accept
+ * it: the microphone, then (for sideloaded builds on Android 13+) the restricted
+ * settings unlock, then the accessibility service that powers the bubble.
  */
 class MainActivity : Activity() {
 
     private var statusView: TextView? = null
     private var engineView: TextView? = null
-    private var keyboardButton: Button? = null
+    private var micButton: Button? = null
+    private var bubbleButton: Button? = null
+    private var restrictedButton: Button? = null
     private val density get() = resources.displayMetrics.density
     private fun dp(v: Int) = (v * density).toInt()
 
@@ -54,7 +63,7 @@ class MainActivity : Activity() {
             setTypeface(typeface, Typeface.BOLD)
         }
         val tagline = TextView(this).apply {
-            text = "Voice dictation for any app. Fast cloud polishing when online, fully offline when not — no account, no cost."
+            text = "Voice dictation for any app. Keep your own keyboard — a ColdVoice bubble appears at the side of the screen whenever you tap into a text field."
             setTextColor(Color.parseColor("#7A7C82"))
             textSize = 15f
             setLineSpacing(dp(3).toFloat(), 1f)
@@ -68,7 +77,6 @@ class MainActivity : Activity() {
             setTextColor(Color.parseColor("#C2C6D0"))
         }
         statusView = TextView(this).apply {
-            text = setupStatus()
             setTextColor(Color.parseColor("#B5B7BD"))
             textSize = 14f
             setLineSpacing(dp(4).toFloat(), 1f)
@@ -81,13 +89,21 @@ class MainActivity : Activity() {
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
         ).apply { bottomMargin = dp(6) })
         root.addView(statusView)
-        root.addView(actionButton("Allow microphone") { requestMicPermission() })
-        keyboardButton = actionButton("Enable ColdVoice keyboard") { onKeyboardButton() }
-        root.addView(keyboardButton)
-        root.addView(actionButton("Enable ColdVoice flow bubble") { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) })
 
-        // A live field so the keyboard can actually be tried without leaving the app:
-        // focus it, switch to the ColdVoice keyboard, and dictate right here.
+        micButton = actionButton("1 · Allow the microphone") { requestMicPermission() }
+        root.addView(micButton)
+
+        // Android 13+ blocks accessibility for apps installed outside the Play
+        // Store until "restricted settings" are unlocked from App info. Without
+        // this step the bubble switch is greyed out with no explanation.
+        restrictedButton = actionButton("2 · Unlock restricted settings") { openAppInfo() }
+        root.addView(restrictedButton)
+
+        bubbleButton = actionButton("3 · Turn on the ColdVoice bubble") {
+            startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+        }
+        root.addView(bubbleButton)
+
         val tryLabel = TextView(this).apply {
             text = "Try it here"
             setTextColor(Color.parseColor("#7A7C82"))
@@ -95,7 +111,7 @@ class MainActivity : Activity() {
             setPadding(dp(2), dp(24), 0, dp(8))
         }
         val tryField = EditText(this).apply {
-            hint = "Tap here, switch to the ColdVoice keyboard, then dictate…"
+            hint = "Tap here — the ColdVoice bubble appears on the right. Tap it and speak."
             setHintTextColor(Color.parseColor("#55585F"))
             setTextColor(Color.WHITE)
             textSize = 15f
@@ -109,38 +125,91 @@ class MainActivity : Activity() {
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
         ))
 
+        // The keyboard is still bundled for anyone who prefers it, but it is no
+        // longer part of setup — the bubble is the way ColdVoice works now.
+        root.addView(TextView(this).apply {
+            text = "Prefer a voice keyboard instead? The optional ColdVoice keyboard is still available in your keyboard settings."
+            setTextColor(Color.parseColor("#55585F"))
+            textSize = 12f
+            setPadding(dp(2), dp(22), 0, 0)
+        })
+        root.addView(actionButton("Keyboard settings (optional)") {
+            startActivity(Intent(Settings.ACTION_INPUT_METHOD_SETTINGS))
+        })
+
         scroll.addView(root)
         setContentView(scroll)
+
+        // The bubble sends the user here when it needs the mic and can't ask itself.
+        if (intent?.getBooleanExtra(EXTRA_REQUEST_MIC, false) == true) requestMicPermission()
+    }
+
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        if (intent?.getBooleanExtra(EXTRA_REQUEST_MIC, false) == true) requestMicPermission()
     }
 
     override fun onResume() {
         super.onResume()
-        statusView?.text = setupStatus()
-        engineView?.text = engineStatus()
-        // Once the keyboard is enabled in system settings, the button's job changes
-        // from "enable it" to "switch to it" so the user is never left at a dead end.
-        keyboardButton?.text =
-            if (keyboardEnabled()) "Switch to ColdVoice keyboard" else "Enable ColdVoice keyboard"
+        refresh()
     }
 
-    /** Step 1 opens system settings to enable it; step 2 pops the keyboard picker. */
-    private fun onKeyboardButton() {
-        if (keyboardEnabled()) {
-            (getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager)
-                .showInputMethodPicker()
-        } else {
-            startActivity(Intent(Settings.ACTION_INPUT_METHOD_SETTINGS))
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        refresh()
+    }
+
+    private fun refresh() {
+        statusView?.text = setupStatus()
+        engineView?.text = engineStatus()
+        micButton?.text =
+            if (hasMic()) "1 · Microphone allowed ✓" else "1 · Allow the microphone"
+        restrictedButton?.text =
+            if (bubbleEnabled()) "2 · Restricted settings unlocked ✓" else "2 · Unlock restricted settings"
+        bubbleButton?.text =
+            if (bubbleEnabled()) "3 · ColdVoice bubble is on ✓" else "3 · Turn on the ColdVoice bubble"
+    }
+
+    private fun hasMic(): Boolean =
+        ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
+            PackageManager.PERMISSION_GRANTED
+
+    private fun requestMicPermission() {
+        if (!hasMic()) {
+            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.RECORD_AUDIO), 1001)
         }
+    }
+
+    /** App info, where Android 13+ hides the "Allow restricted settings" item. */
+    private fun openAppInfo() {
+        startActivity(
+            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                data = Uri.fromParts("package", packageName, null)
+            }
+        )
+    }
+
+    /** Is our accessibility service (the bubble) currently switched on? */
+    private fun bubbleEnabled(): Boolean {
+        val expected = "$packageName/${ColdVoiceBubbleService::class.java.name}"
+        val enabled = Settings.Secure.getString(
+            contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+        ).orEmpty()
+        val splitter = TextUtils.SimpleStringSplitter(':')
+        splitter.setString(enabled)
+        for (entry in splitter) {
+            if (entry.equals(expected, ignoreCase = true)) return true
+        }
+        return false
     }
 
     private fun keyboardEnabled(): Boolean {
         val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
         return imm.enabledInputMethodList.any { it.packageName == packageName }
-    }
-
-    private fun keyboardIsCurrent(): Boolean {
-        val id = Settings.Secure.getString(contentResolver, Settings.Secure.DEFAULT_INPUT_METHOD)
-        return id != null && id.startsWith("$packageName/")
     }
 
     private fun card(): GradientDrawable = GradientDrawable().apply {
@@ -173,12 +242,6 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun requestMicPermission() {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.RECORD_AUDIO), 1001)
-        }
-    }
-
     private fun check(ok: Boolean) = if (ok) "✓" else "•"
 
     private fun engineStatus(): String {
@@ -191,23 +254,21 @@ class MainActivity : Activity() {
     }
 
     private fun setupStatus(): String {
-        val mic = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
-        val speech = SpeechRecognizer.isRecognitionAvailable(this)
-        val kbEnabled = keyboardEnabled()
-        val kbCurrent = keyboardIsCurrent()
-        val kbLine = when {
-            kbCurrent -> "✓ ColdVoice keyboard active"
-            kbEnabled -> "• ColdVoice keyboard enabled — tap \"Switch to ColdVoice keyboard\" to use it"
-            else -> "• ColdVoice keyboard not enabled yet"
-        }
-        return listOf(
-            "${check(mic)} Microphone ${if (mic) "allowed" else "not allowed yet"}",
-            "${check(speech)} On-device speech ${if (speech) "available" else "unavailable"}",
-            kbLine,
+        val lines = mutableListOf(
+            "${check(hasMic())} Microphone ${if (hasMic()) "allowed" else "not allowed yet"}",
+            "${check(bubbleEnabled())} ColdVoice bubble ${if (bubbleEnabled()) "on" else "off"}",
+            "${check(keyboardEnabled())} ColdVoice keyboard (optional) ${if (keyboardEnabled()) "enabled" else "not enabled"}",
             "",
-            "1. Allow the microphone.",
-            "2. Enable the ColdVoice keyboard, then tap \"Switch to ColdVoice keyboard\" and pick it.",
-            "3. Focus the field below (or any text field) to dictate — or enable the flow bubble for any app."
-        ).joinToString("\n")
+            "How it works: tap any text field, the ColdVoice square appears on the right of the screen. Tap it to expand and start dictating, then tap ✓ to drop the text into the field."
+        )
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !bubbleEnabled()) {
+            lines.add("")
+            lines.add("If the bubble switch is greyed out: open App info, tap the ⋮ menu, choose \"Allow restricted settings\", then try step 3 again. Android does this for every app installed outside the Play Store.")
+        }
+        return lines.joinToString("\n")
+    }
+
+    companion object {
+        const val EXTRA_REQUEST_MIC = "coldvoice.requestMic"
     }
 }

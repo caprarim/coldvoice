@@ -7,14 +7,17 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 const ALLOWED_SEND = new Set([
   'recorder:ready', 'recorder:partial', 'recorder:done', 'recorder:error', 'recorder:level',
+  'recorder:micStatus',
   'pill:cancel', 'pill:confirm',
-  'pill:dragStart', 'pill:dragMove', 'pill:dragEnd',
+  'alert:dismiss',
 ]);
 
 const ALLOWED_ON = new Set([
-  'recorder:start', 'recorder:stop', 'recorder:refresh',
+  'recorder:start', 'recorder:stop', 'recorder:refresh', 'recorder:pause', 'recorder:resume',
   'pill:state', 'pill:level',
-  'app:connectivity', 'transcript:new',
+  'alert:show',
+  'app:connectivity', 'transcript:new', 'mic:status',
+  'update:progress',
 ]);
 
 const ALLOWED_INVOKE = new Set([
@@ -24,6 +27,8 @@ const ALLOWED_INVOKE = new Set([
   'db:listTranscripts', 'db:deleteTranscript', 'db:clearTranscripts', 'db:transcriptStats',
   'asr:status', 'ai:status', 'ai:test',
   'app:isOnline', 'auth:status', 'auth:signIn', 'auth:signOut',
+  'mic:status', 'app:openSoundSettings',
+  'update:check', 'update:download', 'update:install',
 ]);
 
 contextBridge.exposeInMainWorld('coldvoice', {

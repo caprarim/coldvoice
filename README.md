@@ -1,66 +1,126 @@
 # ColdVoice
 
-Offline, privacy-first voice dictation for **Windows** and **Android**. Dictate into
-almost any text input; speech is transcribed on-device, cleaned, corrected with your
-dictionary/snippets, and inserted into the focused field. No accounts, no cloud, no
-telemetry.
+Privacy-first voice dictation for **Windows** and **Android**. Speak, and the cleaned
+text lands in whatever field has focus. Transcription runs on-device by default, with
+an optional fast cloud path for grammar and formatting. No accounts, no telemetry.
 
-## Status
+## Downloads
 
-- **Shared (Steps 1–3, tested):** monorepo, deterministic text-processing pipeline
-  (`packages/shared/text-processing`) + tests, editable-target / password-field rejection
-  (`packages/shared/input-detection`) + tests, SQLite schema (`packages/shared/db-schema`).
-  43 passing tests.
-- **Windows Electron MVP (Step 4–5, code complete):** 4-route UI, Snippets + Dictionary
-  CRUD, Settings with rebindable shortcuts, tray, floating pill, mic capture, ASR adapter,
-  clipboard-preserving paste with password rejection. Needs `npm install` + a whisper.cpp
-  model to run end-to-end. See `apps/windows-electron/README.md`.
-- **Android (Step 6–7, code complete):** Kotlin IME voice keyboard, mic recorder, insertion
-  guard, Kotlin text pipeline, optional accessibility bubble service. sherpa-onnx wiring is
-  the marked integration point. See `apps/android/README.md`.
-- **Packaging (Step 8):** electron-builder (NSIS) + Gradle APK. See `docs/PACKAGING.md`.
-- **Website:** static Vercel site in `apps/website` with Supabase login/sign-up pages
-  and a Windows `.exe` download link. In production, set `COLDVOICE_DOWNLOAD_URL`
-  to the GitHub Release asset URL.
+Grab the latest build from the [Releases page](https://github.com/caprarim/coldvoice/releases/latest):
 
-Integration work remaining: ship/install ASR binaries+models, wire sherpa-onnx on Android,
-native hooks for true hold-to-talk and middle-click, and the bubble overlay window. None of
-the GUI/ASR paths were run in the build environment — the shared logic is the tested part.
+| Platform | File |
+| --- | --- |
+| Windows 10/11 (x64) | [ColdVoice-Setup.exe](https://github.com/caprarim/coldvoice/releases/latest/download/ColdVoice-Setup.exe) |
+| Android 8.0+ | [ColdVoice.apk](https://github.com/caprarim/coldvoice/releases/latest/download/ColdVoice.apk) |
+
+The desktop app also updates itself: Settings has a check-for-updates button that
+downloads and installs the newest release in place.
+
+## Windows
+
+Press the hotkey, speak, and the text is typed into the focused field. A small floating
+bar (the pill) shows what's happening and carries four controls:
+
+| Control | What it does |
+| --- | --- |
+| ✕ | Cancel the dictation and throw the audio away |
+| waveform | Live mic level; drag anywhere on the bar to move it, drag a corner to resize |
+| ⏸ / ▶ | Pause the dictation, then carry on from exactly where you stopped |
+| ✓ | Stop and insert the text |
+
+The bar is a non-focusable always-on-top window so it never steals focus from the field
+you're dictating into. Because of that it gets no renderer mouse events at all, so its
+clicks and drags are driven from the global mouse hook in the main process.
+
+### Default shortcuts
+
+| Action | Keys |
+| --- | --- |
+| Hands-free toggle | `Ctrl+1` |
+| Hold to dictate | `Ctrl+CapsLock` |
+| Paste last transcript | `Alt+Shift+Z` (also middle-click) |
+| Pause / resume | not set, bind it yourself in Settings |
+| Cancel | `Esc` |
+
+Pause ships unbound on purpose so it can never collide with a shortcut you already use.
+Set it in Settings > Shortcuts, and clear it again with the ✕ next to the keys.
+
+## Android
+
+ColdVoice does **not** replace your keyboard. Keep using Samsung Keyboard, Gboard, or
+whatever you already have.
+
+Instead, a small ColdVoice square appears at the right edge of the screen, vertically
+centred, whenever you focus a text field. It disappears the moment nothing editable has
+focus, so it never floats over your home screen.
+
+1. Tap the square. It expands into the dictation bar and starts listening.
+2. Speak. Pause and resume with ⏸ / ▶ as often as you like.
+3. Tap ✓ to stop and drop the finished text into the field, or ✕ to throw it away.
+
+Nothing is written into the field until you confirm, so an abandoned dictation never
+leaves half a sentence behind. Password and secure fields are always rejected.
+
+### Setup
+
+Open the app once and work through the three steps:
+
+1. **Allow the microphone.**
+2. **Unlock restricted settings.** Android 13+ blocks accessibility for any app installed
+   outside the Play Store. Open App info, tap the ⋮ menu, choose "Allow restricted
+   settings". Skip this on Android 12 and below.
+3. **Turn on the ColdVoice bubble** in Accessibility settings.
+
+The accessibility service is used only to notice when an editable field has focus and to
+write the finished text back into it.
+
+## Speech engines
+
+Both platforms make the same choice at the start of every dictation, and it cannot change
+mid-sentence:
+
+- **Cloud** (when AI is enabled, a key is set, and you're online): Groq Whisper turbo for
+  speech, then Llama for real grammar and formatting. Short utterances skip the language
+  model and go straight through the deterministic rules.
+- **Offline**: whisper.cpp on Windows, the bundled Vosk model on Android. Fully on-device,
+  cleaned by the deterministic pipeline in `packages/shared/text-processing`.
+
+If the cloud path fails for any reason, it falls back to offline without losing the
+dictation.
 
 ## Layout
 
 ```
 coldvoice/
   apps/
-    windows-electron/   # Electron desktop app (UI, hotkeys, insertion) — TODO
-    android/            # Kotlin IME + optional accessibility bubble — TODO
+    windows-electron/   Electron desktop: hotkeys, pill, mic, ASR, insertion
+    android/            Kotlin: accessibility bubble + optional voice keyboard
+    website/            Static marketing site (Vercel)
   packages/shared/
-    text-processing/    # punctuation, fillers, backtracking, dictionary, snippets, style
-    input-detection/    # editable-target + password-field rules (both platforms)
-    db-schema/          # SQLite schema (shared by Electron + Android)
-  native/asr/           # offline ASR adapters (whisper.cpp / sherpa-onnx) — TODO
-  models/               # local model files live here (never committed) — TODO
-  docs/                 # ARCHITECTURE, SETUP, PRIVACY
+    text-processing/    Punctuation, fillers, dictionary, snippets, style + tests
+    input-detection/    Editable-target and password-field rules + tests
+    db-schema/          SQLite schema shared by both platforms
+  native/asr/           whisper.cpp binaries (not committed)
+  models/               Local model files (never committed)
+  docs/                 ARCHITECTURE, SETUP, PRIVACY, PACKAGING
 ```
 
 ## App routes (exactly 4)
 
 Home · Snippets · Dictionary · Settings. No other routes.
 
-## Default shortcuts
-
-- Hands-free / hold-to-dictate: **Ctrl+1**
-- Paste last transcript: **Middle Click** (also **Alt+Shift+Z**)
-- Cancel: **Esc**
-
-## Run the tests
+## Building
 
 From the repo root:
 
 ```
-npm test
+npm test                  # shared package tests, no install needed
 npm run build:website
-npm run dist:windows
+npm run dist:windows      # needs npm install first
 ```
 
-No dependencies required — uses Node's built-in test runner (Node 18+).
+Android, from `apps/android` (needs `sdk.dir` in `local.properties`):
+
+```
+./gradlew assembleRelease
+```

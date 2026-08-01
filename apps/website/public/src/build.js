@@ -6,7 +6,8 @@ const path = require('path');
 const root = path.resolve(__dirname, '..', '..');
 const src = path.join(root, 'public', 'src');
 const dist = path.join(root, 'dist');
-const installerName = 'ColdVoice-Setup-0.0.1.exe';
+const appVersion = '0.0.1';
+const installerName = `ColdVoice-Setup-${appVersion}.exe`;
 const installerSource = path.resolve(root, '..', 'windows-electron', 'dist', installerName);
 const apkName = 'ColdVoice.apk';
 // The Android release APK, produced by the Gradle build, is picked up from any of
@@ -36,12 +37,18 @@ const config = {
   supabaseAnonKey: process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '',
   downloadUrl,
   androidDownloadUrl,
-  version: '0.0.1',
+  version: appVersion,
 };
 
 fs.writeFileSync(
   path.join(dist, 'config.js'),
   `window.COLDVOICE_CONFIG = ${JSON.stringify(config, null, 2)};\n`
+);
+
+fs.mkdirSync(downloadsDir, { recursive: true });
+fs.writeFileSync(
+  path.join(downloadsDir, 'latest.json'),
+  JSON.stringify({ version: appVersion, windows: `/downloads/${installerName}` }, null, 2) + '\n'
 );
 
 if (downloadUrl.startsWith('/downloads/') && fs.existsSync(installerSource)) {

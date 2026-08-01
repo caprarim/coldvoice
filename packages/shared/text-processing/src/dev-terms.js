@@ -88,6 +88,13 @@ const TECH_TERMS = {
   oauth: 'OAuth',
   jwt: 'JWT',
   sdk: 'SDK',
+  'sub agents': 'sub-agents',
+  subagents: 'sub-agents',
+  'sub agent': 'sub-agent',
+  subagent: 'sub-agent',
+  coldvoice: 'ColdVoice',
+  coldwork: 'ColdWork',
+  supabase: 'Supabase',
 };
 
 const EXT_WORDS = Object.keys(EXTENSIONS).join('|');

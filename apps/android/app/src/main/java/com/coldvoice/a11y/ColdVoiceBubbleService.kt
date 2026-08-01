@@ -5,9 +5,9 @@ import android.accessibilityservice.AccessibilityService
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.PixelFormat
-import android.graphics.Rect
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -18,31 +18,49 @@ import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.core.content.ContextCompat
+import com.coldvoice.MainActivity
 import com.coldvoice.dictation.DictationController
 import com.coldvoice.input.InsertionGuard
 import com.coldvoice.net.Connectivity
+import com.coldvoice.ui.BubbleView
 import com.coldvoice.ui.PillView
 import kotlin.math.abs
 
 /**
- * Floating mic "flow bubble". It appears ONLY when an editable, non-password
- * input is focused (Wispr-style) and is hidden everywhere else. The bubble is the
- * desktop pill: dark control with cancel · waveform · confirm, draggable anywhere
- * on screen. Dictation runs through [DictationController] — the cloud Groq path
- * when online, the offline on-device recognizer otherwise.
+ * The floating ColdVoice control, Wispr-style. It has two faces:
+ *
+ *  - **Collapsed**: a small square carrying the ColdVoice mark, parked at the
+ *    right edge, vertically centred. It exists ONLY while an editable,
+ *    non-password field has focus, so it never floats over the home screen or a
+ *    reading app.
+ *  - **Expanded**: tapping the square swaps it for the dictation pill and starts
+ *    listening straight away — cancel · waveform · pause/play · confirm. Confirm
+ *    ends the dictation and writes the finished text into the field; cancel
+ *    throws it away. Nothing is written until confirm, so an abandoned dictation
+ *    never leaves half a sentence behind.
+ *
+ * The user keeps their own keyboard throughout; ColdVoice never replaces it.
  */
 class ColdVoiceBubbleService : AccessibilityService(), DictationController.Callbacks {
 
     private var windowManager: WindowManager? = null
+    private var bubble: BubbleView? = null
     private var pill: PillView? = null
+    private var attached: View? = null
     private var params: WindowManager.LayoutParams? = null
     private var focusedNode: AccessibilityNodeInfo? = null
     private var controller: DictationController? = null
-    private var listening = false
-    private var hasPlacedManually = false
 
-    // Continuous dictation state: the text already in the field when we started,
-    // plus everything dictated so far, so we never wipe existing input.
+    private var expanded = false
+    private var listening = false
+
+    // User-applied drag offset from the default right-centre anchor, kept so the
+    // control reappears wherever it was last dropped.
+    private var offsetX = 0
+    private var offsetY = 0
+
+    // The text already in the field when dictation started, plus everything
+    // dictated this session, so confirming never wipes what was already typed.
     private var baseText = ""
     private val dictated = StringBuilder()
     private val main = Handler(Looper.getMainLooper())
@@ -65,62 +83,84 @@ class ColdVoiceBubbleService : AccessibilityService(), DictationController.Callb
     }
 
     private fun evaluateFocus(event: AccessibilityEvent) {
-        if (listening) return // don't move/hide the bubble mid-dictation
+        // Never yank the control out from under a live dictation.
+        if (expanded || listening) return
         val node = event.source ?: findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
         if (node != null && InsertionGuard.canInsert(node, event.packageName)) {
             focusedNode?.recycle()
             focusedNode = AccessibilityNodeInfo.obtain(node)
-            showBubble(node)
+            showCollapsed()
         } else {
             focusedNode?.recycle()
             focusedNode = null
-            hideBubble()
+            detach()
         }
     }
 
-    private fun ensurePill(): PillView {
-        pill?.let { return it }
-        val view = PillView(this).apply {
-            onCancel = { onCancelTapped() }
-            onConfirm = { onConfirmTapped() }
-        }
-        attachDrag(view)
-        pill = view
-        return view
-    }
+    // --- overlay plumbing -----------------------------------------------------
 
-    private fun showBubble(node: AccessibilityNodeInfo) {
+    private fun ensureBubble(): BubbleView =
+        bubble ?: BubbleView(this).also {
+            it.onTap = { expand() }
+            attachDrag(it)
+            bubble = it
+        }
+
+    private fun ensurePill(): PillView =
+        pill ?: PillView(this).also {
+            it.onCancel = { onCancelTapped() }
+            it.onConfirm = { onConfirmTapped() }
+            it.onPause = { onPauseTapped() }
+            attachDrag(it)
+            pill = it
+        }
+
+    /**
+     * Swap whichever face is on screen. Both are anchored to the right edge at
+     * the vertical centre, offset by whatever the user has dragged.
+     */
+    private fun attach(view: View, widthDp: Int, heightDp: Int) {
         val manager = windowManager ?: return
-        val view = ensurePill()
-        if (!listening) view.setState(PillView.State.IDLE)
+        if (attached != null && attached !== view) detach()
 
+        val w = dp(widthDp)
+        val h = dp(heightDp)
+        val metrics = resources.displayMetrics
         val lp = params ?: WindowManager.LayoutParams(
-            dp(168), dp(38),
+            w, h,
             WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                 WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
             PixelFormat.TRANSLUCENT
         ).apply { gravity = Gravity.TOP or Gravity.START }
         params = lp
+        lp.width = w
+        lp.height = h
+        lp.x = (metrics.widthPixels - w - dp(10) + offsetX)
+            .coerceIn(0, (metrics.widthPixels - w).coerceAtLeast(0))
+        lp.y = (metrics.heightPixels / 2 - h / 2 + offsetY)
+            .coerceIn(0, (metrics.heightPixels - h).coerceAtLeast(0))
 
-        // Position just below the focused field the first time; after the user
-        // drags it, keep their chosen spot.
-        if (!hasPlacedManually) {
-            val rect = Rect()
-            node.getBoundsInScreen(rect)
-            lp.x = (rect.right - dp(168)).coerceAtLeast(dp(8))
-            lp.y = (rect.bottom + dp(8)).coerceAtLeast(dp(8))
-        }
-
-        if (view.parent == null) manager.addView(view, lp)
-        else manager.updateViewLayout(view, lp)
+        if (view.parent == null) manager.addView(view, lp) else manager.updateViewLayout(view, lp)
+        attached = view
     }
 
-    private fun hideBubble() {
-        val view = pill ?: return
+    private fun detach() {
+        val view = attached ?: return
         if (view.parent != null) {
             try { windowManager?.removeView(view) } catch (_: IllegalArgumentException) {}
         }
+        attached = null
+    }
+
+    private fun showCollapsed() {
+        expanded = false
+        attach(ensureBubble(), BUBBLE_DP, BUBBLE_DP)
+    }
+
+    private fun showExpanded() {
+        expanded = true
+        attach(ensurePill(), PILL_W_DP, PILL_H_DP)
     }
 
     // --- drag -----------------------------------------------------------------
@@ -138,7 +178,7 @@ class ColdVoiceBubbleService : AccessibilityService(), DictationController.Callb
                     downRawX = e.rawX; downRawY = e.rawY
                     startX = lp.x; startY = lp.y
                     dragging = false
-                    false // let buttons receive the press too
+                    false // let the buttons see the press too
                 }
                 MotionEvent.ACTION_MOVE -> {
                     val dx = (e.rawX - downRawX).toInt()
@@ -147,31 +187,62 @@ class ColdVoiceBubbleService : AccessibilityService(), DictationController.Callb
                     if (dragging) {
                         lp.x = startX + dx
                         lp.y = startY + dy
-                        hasPlacedManually = true
                         try { windowManager?.updateViewLayout(view, lp) } catch (_: Exception) {}
                         true
                     } else false
                 }
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> dragging
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    if (dragging) rememberOffset(lp)
+                    dragging
+                }
                 else -> false
             }
         }
     }
 
-    // --- button handlers ------------------------------------------------------
-    private fun onConfirmTapped() {
-        if (listening) stopListening() else startListening()
+    /** Store the drop position as an offset from the default right-centre anchor. */
+    private fun rememberOffset(lp: WindowManager.LayoutParams) {
+        val metrics = resources.displayMetrics
+        offsetX = lp.x - (metrics.widthPixels - lp.width - dp(10))
+        offsetY = lp.y - (metrics.heightPixels / 2 - lp.height / 2)
     }
 
+    // --- button handlers ------------------------------------------------------
+
+    private fun expand() {
+        if (!hasMicPermission()) {
+            requestMicPermission()
+            return
+        }
+        showExpanded()
+        startListening()
+    }
+
+    private fun collapse() {
+        listening = false
+        if (focusedNode != null) showCollapsed() else detach()
+    }
+
+    /** Tick: end the dictation and write the result into the field. */
+    private fun onConfirmTapped() {
+        if (!listening) { collapse(); return }
+        pill?.setState(PillView.State.TRANSCRIBING)
+        controller?.stop()
+    }
+
+    /** Cross: throw the dictation away and fold back to the square. */
     private fun onCancelTapped() {
-        if (listening) cancelListening() else hideBubble()
+        controller?.cancel()
+        dictated.setLength(0)
+        collapse()
+    }
+
+    private fun onPauseTapped() {
+        if (!listening) return
+        controller?.togglePause()
     }
 
     private fun startListening() {
-        if (!hasMicPermission()) {
-            pill?.setState(PillView.State.ERROR, "Allow mic")
-            return
-        }
         baseText = focusedNode?.text?.toString().orEmpty()
         dictated.setLength(0)
         listening = true
@@ -179,64 +250,54 @@ class ColdVoiceBubbleService : AccessibilityService(), DictationController.Callb
         controller?.start()
     }
 
-    private fun stopListening() {
-        controller?.stop()
-        pill?.setState(PillView.State.TRANSCRIBING)
-    }
-
-    private fun cancelListening() {
-        controller?.cancel()
-        listening = false
-        pill?.setState(PillView.State.IDLE)
-    }
-
     // --- DictationController callbacks ----------------------------------------
     override fun onState(state: DictationController.State, message: String?) {
         when (state) {
             DictationController.State.RECORDING -> pill?.setState(PillView.State.RECORDING)
+            DictationController.State.PAUSED -> pill?.setState(PillView.State.PAUSED)
             DictationController.State.TRANSCRIBING -> pill?.setState(PillView.State.TRANSCRIBING)
             DictationController.State.DONE -> {
                 listening = false
                 pill?.setState(PillView.State.DONE)
-                main.postDelayed({ pill?.setState(PillView.State.IDLE) }, 900)
+                main.postDelayed({ collapse() }, 800)
             }
             DictationController.State.INFO -> {
                 listening = false
                 pill?.setState(PillView.State.INFO, message)
-                main.postDelayed({ pill?.setState(PillView.State.IDLE) }, 1200)
+                main.postDelayed({ collapse() }, 1200)
             }
             DictationController.State.ERROR -> {
                 listening = false
                 pill?.setState(PillView.State.ERROR, message)
-                main.postDelayed({ pill?.setState(PillView.State.IDLE) }, 1600)
+                main.postDelayed({ collapse() }, 1800)
             }
         }
     }
 
     override fun onLevel(level: Float) { pill?.setLevel(level) }
 
-    override fun onPreview(text: String) {
-        if (listening && text.isNotBlank()) writeField(combine(text))
-    }
+    /**
+     * Live partials are deliberately NOT written into the field. The text lands
+     * once, on confirm, so cancelling leaves the field exactly as it was.
+     */
+    override fun onPreview(text: String) = Unit
 
     override fun onCommit(text: String) {
         if (dictated.isNotEmpty()) dictated.append(' ')
         dictated.append(text)
-        writeField(combine(null))
     }
 
     override fun onComplete(fullText: String) {
-        writeField(combine(null))
+        writeField(combine())
         val all = dictated.toString().trim()
         if (all.isNotBlank()) copyToClipboard(all)
     }
 
-    /** Combine base field text + dictated text (+ optional live tail). */
-    private fun combine(livePartial: String?): String {
+    /** The field's original contents plus everything dictated this session. */
+    private fun combine(): String {
         val parts = ArrayList<String>()
         if (baseText.isNotBlank()) parts.add(baseText.trim())
         if (dictated.isNotBlank()) parts.add(dictated.toString().trim())
-        if (!livePartial.isNullOrBlank()) parts.add(livePartial.trim())
         return parts.joinToString(" ")
     }
 
@@ -261,12 +322,24 @@ class ColdVoiceBubbleService : AccessibilityService(), DictationController.Callb
     }
 
     private fun hasMicPermission(): Boolean =
-        ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+        ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
+            PackageManager.PERMISSION_GRANTED
+
+    /** Only the app can ask for a runtime permission, so hand off to setup. */
+    private fun requestMicPermission() {
+        startActivity(
+            Intent(this, MainActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                putExtra(MainActivity.EXTRA_REQUEST_MIC, true)
+            }
+        )
+    }
 
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
 
     override fun onInterrupt() {
-        cancelListening()
+        controller?.cancel()
+        collapse()
     }
 
     override fun onDestroy() {
@@ -275,7 +348,13 @@ class ColdVoiceBubbleService : AccessibilityService(), DictationController.Callb
         controller?.destroy()
         controller = null
         Connectivity.stop()
-        hideBubble()
+        detach()
         super.onDestroy()
+    }
+
+    private companion object {
+        const val BUBBLE_DP = 46
+        const val PILL_W_DP = 196
+        const val PILL_H_DP = 42
     }
 }

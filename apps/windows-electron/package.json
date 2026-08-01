@@ -1,7 +1,8 @@
 {
   "name": "@coldvoice/windows-electron",
-  "version": "0.0.1",
-  "description": "ColdVoice Windows desktop app (Electron).",
+  "version": "0.3.0",
+  "description": "ColdVoice",
+  "author": "ColdVoice",
   "main": "src/main/main.js",
   "scripts": {
     "start": "electron .",

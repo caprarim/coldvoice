@@ -2,7 +2,8 @@
 
 // Wraps mousehook.ps1, which reports global left/middle button presses and the
 // foreground window class. Emits onClick(button, className) where button is
-// 'L' or 'M'. Used by the click-to-paste fallback.
+// 'L', 'LU' (left release) or 'M'. Used by the click-to-paste fallback and to
+// end pill drags.
 
 const path = require('path');
 const fs = require('fs');
@@ -12,8 +13,12 @@ const { log } = require('./log');
 
 let proc = null;
 let handler = () => {};
+let restartTimer = null;
+let intentionalStop = false;
 
 function stop() {
+  intentionalStop = true;
+  if (restartTimer) { clearTimeout(restartTimer); restartTimer = null; }
   if (proc) {
     try { proc.kill(); } catch { /* ignore */ }
     proc = null;
@@ -36,7 +41,13 @@ function scriptPath(name) {
 }
 
 function start(onClick) {
-  stop();
+  intentionalStop = true;
+  if (restartTimer) { clearTimeout(restartTimer); restartTimer = null; }
+  if (proc) {
+    try { proc.kill(); } catch { /* ignore */ }
+    proc = null;
+  }
+  intentionalStop = false;
   handler = onClick || handler;
   const script = scriptPath('mousehook.ps1');
   proc = spawn(
@@ -58,11 +69,19 @@ function start(onClick) {
       const pipe = rest.indexOf('|');
       const className = pipe >= 0 ? rest.slice(0, pipe) : rest;
       const processName = pipe >= 0 ? rest.slice(pipe + 1) : '';
-      if (button === 'L' || button === 'M') handler(button, className, processName);
+      if (button === 'L' || button === 'LU' || button === 'M') handler(button, className, processName);
     }
   });
   proc.stderr.on('data', (d) => log('mousehook stderr:', d.toString().trim()));
-  proc.on('exit', (code) => log(`mousehook exited (${code})`));
+  proc.on('exit', (code) => {
+    log(`mousehook exited (${code})`);
+    proc = null;
+    if (intentionalStop) return;
+    restartTimer = setTimeout(() => {
+      restartTimer = null;
+      if (!intentionalStop) start(handler);
+    }, 800);
+  });
   log('mousehook started');
 }
 

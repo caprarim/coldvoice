@@ -48,4 +48,27 @@ object WavEncoder {
         }
         return Math.sqrt(sum / samples.size)
     }
+
+    /**
+     * Peak-normalize quiet recordings (far-from-mic speech) so the ASR gets a
+     * strong signal. Gain is capped so noise-only audio isn't blown up, and
+     * already-loud audio is returned untouched. Mirrors the desktop recorder.
+     */
+    fun normalizeQuiet(samples: ShortArray, maxGain: Double = 12.0): ShortArray {
+        if (samples.isEmpty()) return samples
+        var peak = 0
+        for (s in samples) {
+            val a = if (s == Short.MIN_VALUE) 32767 else Math.abs(s.toInt())
+            if (a > peak) peak = a
+        }
+        if (peak == 0) return samples
+        val gain = Math.min(maxGain, 0.9 * 32767.0 / peak)
+        if (gain <= 1.05) return samples
+        val out = ShortArray(samples.size)
+        for (i in samples.indices) {
+            val v = Math.round(samples[i] * gain).toInt()
+            out[i] = v.coerceIn(-32768, 32767).toShort()
+        }
+        return out
+    }
 }

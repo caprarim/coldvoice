@@ -8,6 +8,7 @@ const { removeFillers } = require('./fillers');
 const { applyBacktracking } = require('./backtracking');
 const { applyFormatting } = require('./formatting');
 const { applyDevTerms } = require('./dev-terms');
+const { applyMishears } = require('./mishears');
 const { applyDictionary } = require('./dictionary');
 const { expandSnippets } = require('./snippets');
 const { applyStyle, styleForApp } = require('./style');
@@ -42,9 +43,11 @@ function process(rawText, options = {}) {
   // 4. Backtracking / corrections.
   text = applyBacktracking(text);
   // 5. Formatting (capitalization, repeated punctuation, lists).
-  text = applyFormatting(text);
+  text = applyFormatting(text, { autoLists: !!options.autoLists });
   // 5b. Developer awareness (tech-term casing + @filename mentions).
   if (options.developerMode) text = applyDevTerms(text);
+  // 5c. Built-in ASR mishearing fixes (sub-agents, respectively, etc.).
+  text = applyMishears(text, { developerMode: !!options.developerMode });
   // 6. Dictionary replacements.
   text = applyDictionary(text, options.dictionary || []);
   // 7. Snippet expansion.

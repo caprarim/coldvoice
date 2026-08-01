@@ -4,6 +4,8 @@ node_modules/
 dist/
 build/
 out/
+# Staged copies of the built installer / APK, uploaded to GitHub Releases.
+release-assets/
 *.log
 _pill*.png
 .tools/

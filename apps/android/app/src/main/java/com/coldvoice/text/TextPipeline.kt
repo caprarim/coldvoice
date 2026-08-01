@@ -27,6 +27,24 @@ object TextPipeline {
         return t.trim()
     }
 
+    /**
+     * The post-LLM pass, mirroring desktop main.js: once the cloud model has done
+     * the grammar and formatting, only the user's own exact rules still apply —
+     * spoken punctuation, dictionary, snippets. The filler-stripping and
+     * capitalization steps are deliberately skipped; the model already did them,
+     * and re-running them mangles deliberate wording.
+     */
+    fun applyUserRules(
+        text: String,
+        dictionary: List<DictEntry> = emptyList(),
+        snippets: List<Snippet> = emptyList()
+    ): String {
+        var t = convertSpokenPunctuation(text)
+        t = applyDictionary(t, dictionary)
+        t = expandSnippets(t, snippets)
+        return t.trim()
+    }
+
     private fun normalizeWhitespace(s: String): String =
         s.replace("\r\n", "\n").replace(Regex("[ \t]+"), " ").replace(Regex(" *\n *"), "\n").trim()
 

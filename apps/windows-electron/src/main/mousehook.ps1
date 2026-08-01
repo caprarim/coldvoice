@@ -5,7 +5,9 @@ param([int]$PollMs = 15)
 # button plus the foreground window's class name so the main process can decide
 # whether to paste the last transcript (middle = anywhere, left = terminals).
 #
-# Output lines: "L:<className>" / "M:<className>". No click is swallowed.
+# Output lines: "L:<className>" / "M:<className>" on DOWN edges, and a bare
+# "LU:|" on the left button UP edge (used to end pill drags). No click is
+# swallowed.
 
 Add-Type @"
 using System;
@@ -44,6 +46,7 @@ while ($true) {
   $l = ([CVMouse]::GetAsyncKeyState(0x01) -band 0x8000) -ne 0
   $m = ([CVMouse]::GetAsyncKeyState(0x04) -band 0x8000) -ne 0
   if ($l -and -not $lWas) { [Console]::Out.WriteLine("L:" + (ForeInfo)); [Console]::Out.Flush() }
+  if (-not $l -and $lWas) { [Console]::Out.WriteLine("LU:|"); [Console]::Out.Flush() }
   if ($m -and -not $mWas) { [Console]::Out.WriteLine("M:" + (ForeInfo)); [Console]::Out.Flush() }
   $lWas = $l
   $mWas = $m

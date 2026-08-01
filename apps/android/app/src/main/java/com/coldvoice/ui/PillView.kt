@@ -25,10 +25,11 @@ import android.widget.TextView
 @SuppressLint("ViewConstructor")
 class PillView(context: Context) : LinearLayout(context) {
 
-    enum class State { RECORDING, TRANSCRIBING, IDLE, INFO, ERROR, DONE }
+    enum class State { RECORDING, PAUSED, TRANSCRIBING, IDLE, INFO, ERROR, DONE }
 
     var onCancel: (() -> Unit)? = null
     var onConfirm: (() -> Unit)? = null
+    var onPause: (() -> Unit)? = null
 
     private val d = context.resources.displayMetrics.density
     private fun dp(v: Float) = (v * d).toInt()
@@ -46,6 +47,14 @@ class PillView(context: Context) : LinearLayout(context) {
         pressedCircleColor = Color.parseColor("#E0556A") // cancel:hover
         pressedIconColor = Color.WHITE
         setOnClickListener { onCancel?.invoke() }
+    }
+
+    private val pauseButton = IconButton(context, IconButton.Icon.PAUSE).apply {
+        circleColor = Color.parseColor("#20222A")
+        iconColor = Color.parseColor("#CFD3DC")
+        pressedCircleColor = Color.parseColor("#3A3D45")
+        pressedIconColor = Color.WHITE
+        setOnClickListener { onPause?.invoke() }
     }
 
     private val confirmButton = IconButton(context, IconButton.Icon.CONFIRM).apply {
@@ -82,6 +91,7 @@ class PillView(context: Context) : LinearLayout(context) {
         val side = dp(21f)
         addView(cancelButton, LayoutParams(side, side).apply { marginEnd = dp(5f) })
         addView(center, LayoutParams(0, dp(22f), 1f))
+        addView(pauseButton, LayoutParams(side, side).apply { marginStart = dp(5f) })
         addView(confirmButton, LayoutParams(side, side).apply { marginStart = dp(5f) })
 
         setState(State.RECORDING)
@@ -90,14 +100,30 @@ class PillView(context: Context) : LinearLayout(context) {
     fun setLevel(level: Float) = waveform.setLevel(level)
 
     fun setState(state: State, message: String? = null) {
+        // The pause control only means anything mid-dictation; elsewhere it stays
+        // in place (so the row never reflows) but reads as unavailable.
+        pauseButton.isEnabled = state == State.RECORDING || state == State.PAUSED
+        pauseButton.alpha = if (pauseButton.isEnabled) 1f else 0.3f
+        setPaused(state == State.PAUSED)
         when (state) {
             State.RECORDING -> showWave(WaveformView.Mode.RECORDING)
+            State.PAUSED -> showLabel(message ?: "Paused", Color.parseColor("#F5B544"))
             State.TRANSCRIBING -> showWave(WaveformView.Mode.TRANSCRIBING)
             State.IDLE -> showWave(WaveformView.Mode.IDLE)
             State.INFO -> showLabel(message ?: "", Color.parseColor("#C2C6D0"))
             State.ERROR -> showLabel(message ?: "Error", Color.parseColor("#FF8A9B"))
             State.DONE -> showLabel(message ?: "Inserted", Color.parseColor("#69E0A6"))
         }
+    }
+
+    /** Swap the pause glyph for a play glyph while the dictation is held. */
+    private fun setPaused(paused: Boolean) {
+        pauseButton.setIcon(if (paused) IconButton.Icon.PLAY else IconButton.Icon.PAUSE)
+        pauseButton.circleColor =
+            if (paused) Color.parseColor("#F5B544") else Color.parseColor("#20222A")
+        pauseButton.iconColor =
+            if (paused) Color.parseColor("#14151A") else Color.parseColor("#CFD3DC")
+        pauseButton.invalidate()
     }
 
     private fun showWave(mode: WaveformView.Mode) {
@@ -113,9 +139,15 @@ class PillView(context: Context) : LinearLayout(context) {
         label.setTextColor(color)
     }
 
-    /** A circular icon button that draws an X (cancel) or check (confirm). */
-    private class IconButton(context: Context, private val icon: Icon) : View(context) {
-        enum class Icon { CANCEL, CONFIRM }
+    /** A circular icon button drawing an X, a check, or the pause / play glyph. */
+    private class IconButton(context: Context, private var icon: Icon) : View(context) {
+        enum class Icon { CANCEL, CONFIRM, PAUSE, PLAY }
+
+        fun setIcon(next: Icon) {
+            if (icon == next) return
+            icon = next
+            invalidate()
+        }
 
         var circleColor = Color.DKGRAY
         var iconColor = Color.WHITE
@@ -131,6 +163,7 @@ class PillView(context: Context) : LinearLayout(context) {
             strokeWidth = 2.4f * d
         }
         private val path = Path()
+        private val solid = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
 
         init {
             isClickable = true
@@ -159,6 +192,19 @@ class PillView(context: Context) : LinearLayout(context) {
                     path.moveTo(cx - s, cy + s * 0.1f)
                     path.lineTo(cx - s * 0.25f, cy + s * 0.75f)
                     path.lineTo(cx + s, cy - s * 0.7f)
+                }
+                Icon.PAUSE -> {
+                    path.moveTo(cx - s * 0.5f, cy - s); path.lineTo(cx - s * 0.5f, cy + s)
+                    path.moveTo(cx + s * 0.5f, cy - s); path.lineTo(cx + s * 0.5f, cy + s)
+                }
+                Icon.PLAY -> {
+                    solid.color = if (isPressed) pressedIconColor else iconColor
+                    path.moveTo(cx - s * 0.6f, cy - s)
+                    path.lineTo(cx + s, cy)
+                    path.lineTo(cx - s * 0.6f, cy + s)
+                    path.close()
+                    canvas.drawPath(path, solid)
+                    return
                 }
             }
             canvas.drawPath(path, stroke)

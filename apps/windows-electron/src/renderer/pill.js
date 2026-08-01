@@ -20,8 +20,8 @@ function render() {
     const t = Date.now() / 120;
     for (let i = 0; i < barEls.length; i++) {
       const wobble = 0.5 + 0.5 * Math.sin(t + i * 0.8);
-      const h = 3 + BASE[i] * (3 + level * 16) * (0.55 + 0.45 * wobble);
-      barEls[i].style.height = `${Math.min(14, h).toFixed(1)}px`;
+      const h = 3 + BASE[i] * (3 + level * 12) * (0.55 + 0.45 * wobble);
+      barEls[i].style.height = `${Math.min(10, h).toFixed(1)}px`;
     }
     raf = requestAnimationFrame(render);
   }
@@ -33,39 +33,14 @@ function setState(next) {
   cancelAnimationFrame(raf);
   if (next === 'recording') {
     raf = requestAnimationFrame(render);
-  } else if (next === 'idle') {
-    for (const b of barEls) b.style.height = '4px';
+  } else if (next === 'idle' || next === 'paused') {
+    for (const b of barEls) b.style.height = '3px';
   }
 }
 
-document.getElementById('cancel').addEventListener('click', () => cv.send('pill:cancel'));
-document.getElementById('confirm').addEventListener('click', () => cv.send('pill:confirm'));
-
-// Drag the whole bar (anywhere except the two buttons) to move the window. We
-// track screen-space deltas and let the main process move + remember the spot.
-let dragging = false;
-let originX = 0;
-let originY = 0;
-pill.addEventListener('pointerdown', (e) => {
-  if (e.button !== 0 || e.target.closest('button')) return;
-  dragging = true;
-  originX = e.screenX;
-  originY = e.screenY;
-  try { pill.setPointerCapture(e.pointerId); } catch (_) {}
-  cv.send('pill:dragStart');
-});
-pill.addEventListener('pointermove', (e) => {
-  if (!dragging) return;
-  cv.send('pill:dragMove', { dx: e.screenX - originX, dy: e.screenY - originY });
-});
-function endDrag(e) {
-  if (!dragging) return;
-  dragging = false;
-  try { pill.releasePointerCapture(e.pointerId); } catch (_) {}
-  cv.send('pill:dragEnd');
-}
-pill.addEventListener('pointerup', endDrag);
-pill.addEventListener('pointercancel', endDrag);
+// Clicks and dragging are handled entirely by the main process (global mouse
+// poller + window glue): this window is non-focusable, so DOM mouse events on
+// it never fire. Main hit-tests the press against the button zones instead.
 
 cv.on('pill:level', (data) => {
   if (data && typeof data.level === 'number') level = data.level;
@@ -74,11 +49,13 @@ cv.on('pill:level', (data) => {
 cv.on('pill:state', (data) => {
   if (!data) return;
   if (data.state === 'recording') { level = 0; setState('recording'); }
+  else if (data.state === 'paused') { level = 0; label.textContent = 'Paused'; setState('paused'); }
   else if (data.state === 'transcribing') setState('transcribing');
   else if (data.state === 'idle') setState('idle');
   else if (data.state === 'done') { label.textContent = 'Inserted'; setState('done'); }
   else if (data.state === 'info') { label.textContent = data.message || ''; setState('info'); }
   else if (data.state === 'error') { label.textContent = data.message || 'Error'; setState('error'); }
+  else if (data.state === 'nomic') { label.textContent = data.message || 'No microphone'; setState('nomic'); }
 });
 
 setState('recording');

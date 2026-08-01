@@ -47,7 +47,9 @@ function setOnline(next) {
 }
 
 async function tick() {
-  setOnline(await probeOnce());
+  let ok = await probeOnce();
+  if (!ok && online) ok = await probeOnce();
+  setOnline(ok);
 }
 
 function start() {

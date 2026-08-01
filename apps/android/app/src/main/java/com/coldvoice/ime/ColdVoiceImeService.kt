@@ -97,7 +97,7 @@ class ColdVoiceImeService : InputMethodService(), DictationController.Callbacks 
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(8), dp(8), dp(8), dp(10))
-            addView(pill, LinearLayout.LayoutParams(dp(150), dp(38)))
+            addView(pill, LinearLayout.LayoutParams(dp(212), dp(56)))
             addView(hintView)
         }
 

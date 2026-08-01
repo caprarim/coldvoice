@@ -36,7 +36,7 @@ class PillView(context: Context) : LinearLayout(context) {
 
     private val background = GradientDrawable().apply {
         shape = GradientDrawable.RECTANGLE
-        cornerRadius = 9f * d
+        cornerRadius = 13f * d
         setColor(Color.parseColor("#101114"))   // --bg
         setStroke(dp(1f), Color.parseColor("#2A2A2F"))
     }
@@ -69,7 +69,7 @@ class PillView(context: Context) : LinearLayout(context) {
 
     private val label = TextView(context).apply {
         setTextColor(Color.parseColor("#C2C6D0"))
-        textSize = 12f
+        textSize = 14f
         gravity = Gravity.CENTER
         visibility = View.GONE
     }
@@ -86,13 +86,13 @@ class PillView(context: Context) : LinearLayout(context) {
         orientation = HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
         setBackground(background)
-        setPadding(dp(5f), 0, dp(5f), 0)
+        setPadding(dp(8f), 0, dp(8f), 0)
 
-        val side = dp(21f)
-        addView(cancelButton, LayoutParams(side, side).apply { marginEnd = dp(5f) })
-        addView(center, LayoutParams(0, dp(22f), 1f))
-        addView(pauseButton, LayoutParams(side, side).apply { marginStart = dp(5f) })
-        addView(confirmButton, LayoutParams(side, side).apply { marginStart = dp(5f) })
+        val side = dp(40f)
+        addView(cancelButton, LayoutParams(side, side).apply { marginEnd = dp(6f) })
+        addView(center, LayoutParams(0, dp(30f), 1f))
+        addView(pauseButton, LayoutParams(side, side).apply { marginStart = dp(6f) })
+        addView(confirmButton, LayoutParams(side, side).apply { marginStart = dp(6f) })
 
         setState(State.RECORDING)
     }
@@ -160,7 +160,7 @@ class PillView(context: Context) : LinearLayout(context) {
             style = Paint.Style.STROKE
             strokeCap = Paint.Cap.ROUND
             strokeJoin = Paint.Join.ROUND
-            strokeWidth = 2.4f * d
+            strokeWidth = 3f * d
         }
         private val path = Path()
         private val solid = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }

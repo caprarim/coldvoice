@@ -17,6 +17,7 @@ import android.view.View
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import android.view.accessibility.AccessibilityWindowInfo
 import androidx.core.content.ContextCompat
 import com.coldvoice.MainActivity
 import com.coldvoice.dictation.DictationController
@@ -76,25 +77,83 @@ class ColdVoiceBubbleService : AccessibilityService(), DictationController.Callb
         event ?: return
         when (event.eventType) {
             AccessibilityEvent.TYPE_VIEW_FOCUSED,
+            AccessibilityEvent.TYPE_VIEW_CLICKED,
+            AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED,
             AccessibilityEvent.TYPE_VIEW_TEXT_SELECTION_CHANGED,
-            AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> evaluateFocus(event)
+            AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED,
+            AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED,
+            AccessibilityEvent.TYPE_WINDOWS_CHANGED -> scheduleFocusCheck()
             else -> Unit
         }
     }
 
-    private fun evaluateFocus(event: AccessibilityEvent) {
+    /**
+     * Events arrive in bursts — a tap on a field emits focus, selection and window
+     * changes within a few milliseconds, and the keyboard adds its own on top.
+     * Re-evaluating on each one made the control blink, so the burst is collapsed
+     * into a single check.
+     */
+    private fun scheduleFocusCheck() {
+        main.removeCallbacks(focusCheck)
+        main.postDelayed(focusCheck, FOCUS_DEBOUNCE_MS)
+    }
+
+    private val focusCheck = Runnable { evaluateFocus() }
+    private val hideRunnable = Runnable { hideNow() }
+
+    private fun evaluateFocus() {
         // Never yank the control out from under a live dictation.
         if (expanded || listening) return
-        val node = event.source ?: findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
-        if (node != null && InsertionGuard.canInsert(node, event.packageName)) {
-            focusedNode?.recycle()
-            focusedNode = AccessibilityNodeInfo.obtain(node)
+        val node = editableFocus(deep = attached != null)
+        if (node != null) {
+            main.removeCallbacks(hideRunnable)
+            if (node !== focusedNode) {
+                focusedNode?.recycle()
+                focusedNode = AccessibilityNodeInfo.obtain(node)
+            }
             showCollapsed()
-        } else {
-            focusedNode?.recycle()
-            focusedNode = null
-            detach()
+        } else if (attached != null || focusedNode != null) {
+            // The editor is often momentarily unreachable while the keyboard or a
+            // suggestion popup takes the active window. Give it a beat to come
+            // back before folding the control away.
+            main.removeCallbacks(hideRunnable)
+            main.postDelayed(hideRunnable, HIDE_GRACE_MS)
         }
+    }
+
+    private fun hideNow() {
+        if (expanded || listening) return
+        if (editableFocus(deep = true) != null) return
+        focusedNode?.recycle()
+        focusedNode = null
+        detach()
+    }
+
+    /**
+     * The focused editor, wherever it lives. The event's own source is not
+     * trusted: keyboard and popup windows report themselves as the source, which
+     * would otherwise read as "no text field" and hide the control mid-typing.
+     *
+     * The `deep` sweep walks every window and is only worth its cost while the
+     * control is already on screen — that is when the editor may have slipped
+     * behind a popup and the cheap lookups come back empty.
+     */
+    private fun editableFocus(deep: Boolean): AccessibilityNodeInfo? {
+        findFocus(AccessibilityNodeInfo.FOCUS_INPUT)?.let {
+            if (InsertionGuard.canInsert(it, it.packageName)) return it
+        }
+        rootInActiveWindow?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)?.let {
+            if (InsertionGuard.canInsert(it, it.packageName)) return it
+        }
+        if (!deep) return null
+        val list = try { windows } catch (_: Exception) { null } ?: return null
+        for (window in list) {
+            if (window.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD) continue
+            val root = window.root ?: continue
+            val focus = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT) ?: continue
+            if (InsertionGuard.canInsert(focus, focus.packageName)) return focus
+        }
+        return null
     }
 
     // --- overlay plumbing -----------------------------------------------------
@@ -155,7 +214,9 @@ class ColdVoiceBubbleService : AccessibilityService(), DictationController.Callb
 
     private fun showCollapsed() {
         expanded = false
-        attach(ensureBubble(), BUBBLE_DP, BUBBLE_DP)
+        val view = ensureBubble()
+        if (attached === view && view.parent != null) return
+        attach(view, BUBBLE_DP, BUBBLE_DP)
     }
 
     private fun showExpanded() {
@@ -243,7 +304,7 @@ class ColdVoiceBubbleService : AccessibilityService(), DictationController.Callb
     }
 
     private fun startListening() {
-        baseText = focusedNode?.text?.toString().orEmpty()
+        baseText = currentFieldText()
         dictated.setLength(0)
         listening = true
         pill?.setState(PillView.State.RECORDING)
@@ -291,6 +352,25 @@ class ColdVoiceBubbleService : AccessibilityService(), DictationController.Callb
         writeField(combine())
         val all = dictated.toString().trim()
         if (all.isNotBlank()) copyToClipboard(all)
+    }
+
+    /**
+     * What the user has actually typed into the focused field.
+     *
+     * An empty editor reports its placeholder as its text — Google's search box
+     * answers "Ask Google" — so taking the node's text at face value made every
+     * dictation land appended to the placeholder. The hint is filtered out, and
+     * the node is refreshed first so the snapshot taken at focus time can't hand
+     * back stale contents.
+     */
+    private fun currentFieldText(): String {
+        val node = focusedNode ?: return ""
+        try { node.refresh() } catch (_: Exception) {}
+        if (node.isShowingHintText) return ""
+        val text = node.text?.toString().orEmpty()
+        val hint = node.hintText?.toString().orEmpty()
+        if (hint.isNotEmpty() && text.trim() == hint.trim()) return ""
+        return text
     }
 
     /** The field's original contents plus everything dictated this session. */
@@ -343,6 +423,8 @@ class ColdVoiceBubbleService : AccessibilityService(), DictationController.Callb
     }
 
     override fun onDestroy() {
+        main.removeCallbacks(focusCheck)
+        main.removeCallbacks(hideRunnable)
         focusedNode?.recycle()
         focusedNode = null
         controller?.destroy()
@@ -353,8 +435,10 @@ class ColdVoiceBubbleService : AccessibilityService(), DictationController.Callb
     }
 
     private companion object {
-        const val BUBBLE_DP = 46
-        const val PILL_W_DP = 196
-        const val PILL_H_DP = 42
+        const val FOCUS_DEBOUNCE_MS = 150L
+        const val HIDE_GRACE_MS = 900L
+        const val BUBBLE_DP = 64
+        const val PILL_W_DP = 252
+        const val PILL_H_DP = 60
     }
 }

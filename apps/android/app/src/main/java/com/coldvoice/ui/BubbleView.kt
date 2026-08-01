@@ -2,14 +2,17 @@ package com.coldvoice.ui
 
 import android.annotation.SuppressLint
 import android.content.Context
-import android.graphics.Color
-import android.graphics.drawable.GradientDrawable
+import android.graphics.Outline
+import android.view.View
+import android.view.ViewOutlineProvider
 import android.widget.FrameLayout
+import android.widget.ImageView
+import com.coldvoice.R
 
 /**
- * The collapsed ColdVoice bubble: a small rounded square carrying the app mark,
- * parked at the right edge of the screen whenever a text field has focus. Tapping
- * it expands into the dictation pill.
+ * The collapsed ColdVoice bubble: the app icon itself, parked at the right edge of
+ * the screen whenever a text field has focus. Tapping it expands into the
+ * dictation pill.
  */
 @SuppressLint("ViewConstructor")
 class BubbleView(context: Context) : FrameLayout(context) {
@@ -17,24 +20,22 @@ class BubbleView(context: Context) : FrameLayout(context) {
     var onTap: (() -> Unit)? = null
 
     private val d = context.resources.displayMetrics.density
-    private fun dp(v: Float) = (v * d).toInt()
 
-    private val mark = ColdVoiceMarkView(context)
-
-    private val bg = GradientDrawable().apply {
-        shape = GradientDrawable.RECTANGLE
-        cornerRadius = 14f * d
-        setColor(Color.parseColor("#15161B"))
-        setStroke(dp(1f), Color.parseColor("#2A2C33"))
+    private val icon = ImageView(context).apply {
+        setImageResource(R.mipmap.ic_launcher)
+        scaleType = ImageView.ScaleType.FIT_CENTER
     }
 
     init {
-        background = bg
         elevation = 6f * d
         isClickable = true
-        val pad = dp(9f)
-        addView(mark, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
-        mark.setPadding(pad, pad, pad, pad)
+        clipToOutline = true
+        outlineProvider = object : ViewOutlineProvider() {
+            override fun getOutline(view: View, outline: Outline) {
+                outline.setRoundRect(0, 0, view.width, view.height, 18f * d)
+            }
+        }
+        addView(icon, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
         setOnClickListener { onTap?.invoke() }
     }
 

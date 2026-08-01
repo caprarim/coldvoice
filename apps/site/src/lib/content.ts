@@ -25,7 +25,7 @@ export const DOWNLOADS = {
     icon: "Monitor",
     requirement: "Ubuntu 22.04+ · x64",
     file: "ColdVoice.deb",
-    size: "170 MB",
+    size: "133 MB",
     version: "0.3.1",
     href: "https://github.com/caprarim/coldvoice/releases/latest/download/ColdVoice.deb",
     note: "Tauri v2 desktop app with the same pill and the same offline whisper.cpp core. An AppImage is on the releases page if you would rather not install a package.",

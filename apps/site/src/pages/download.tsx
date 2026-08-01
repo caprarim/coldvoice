@@ -14,6 +14,12 @@ const WINDOWS_STEPS = [
   "Press Ctrl+1 in any text field and start talking.",
 ]
 
+const LINUX_STEPS = [
+  "Install the .deb (double-click it, or sudo apt install ./ColdVoice.deb), or mark the AppImage executable.",
+  "On Wayland, either log in with Ubuntu on Xorg or bind a GNOME custom shortcut to coldvoice --toggle.",
+  "Press Ctrl+1, speak, and the text lands in the focused field.",
+]
+
 const ANDROID_STEPS = [
   "Allow installs from unknown sources, then open the APK.",
   "On Android 13+, allow restricted settings for ColdVoice.",
@@ -23,6 +29,7 @@ const ANDROID_STEPS = [
 export default function Download() {
   const platforms = [
     { ...DOWNLOADS.windows, steps: WINDOWS_STEPS },
+    { ...DOWNLOADS.linux, steps: LINUX_STEPS },
     { ...DOWNLOADS.android, steps: ANDROID_STEPS },
   ]
 

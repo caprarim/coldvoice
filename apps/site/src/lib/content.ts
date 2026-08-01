@@ -2,9 +2,10 @@ export const SITE = {
   name: "ColdVoice",
   tagline: "Talk. It types.",
   description:
-    "Offline voice dictation for Windows and Android. Press a hotkey, speak, and clean text lands in whatever field already has focus.",
+    "Offline voice dictation for Windows, Linux and Android. Press a hotkey, speak, and clean text lands in whatever field already has focus.",
   repo: "https://github.com/caprarim/coldvoice",
   windowsVersion: "0.3.1",
+  linuxVersion: "0.3.1",
   androidVersion: "0.3.0",
 } as const
 
@@ -18,6 +19,16 @@ export const DOWNLOADS = {
     version: "0.3.1",
     href: "https://github.com/caprarim/coldvoice/releases/latest/download/ColdVoice-Setup.exe",
     note: "Electron desktop app. Global hotkeys, the floating pill, whisper.cpp and the base.en model bundled in the installer.",
+  },
+  linux: {
+    platform: "Linux",
+    icon: "Monitor",
+    requirement: "Ubuntu 22.04+ · x64",
+    file: "ColdVoice.deb",
+    size: "170 MB",
+    version: "0.3.1",
+    href: "https://github.com/caprarim/coldvoice/releases/latest/download/ColdVoice.deb",
+    note: "Tauri v2 desktop app with the same pill and the same offline whisper.cpp core. An AppImage is on the releases page if you would rather not install a package.",
   },
   android: {
     platform: "Android",
@@ -231,7 +242,7 @@ export const FAQ = [
   {
     tag: "Platforms",
     q: "Is there a Mac or Linux build?",
-    a: "No. Windows 10 and 11 on x64, and Android 8.0 and above on arm. Nothing else is built or tested right now.",
+    a: "Linux yes, Mac no. Ubuntu 22.04 and newer on x64, as a .deb or an AppImage, alongside Windows 10 and 11 on x64 and Android 8.0 and above on arm. There is no macOS build.",
   },
   {
     tag: "Trust",

@@ -16,6 +16,15 @@ export function DownloadButtons({ className }: { className?: string }) {
         </a>
       </Button>
       <Button asChild size="lg" variant="secondary">
+        <a href={DOWNLOADS.linux.href}>
+          <Icon name="Monitor" size={14} />
+          Download for Linux
+          <span className="font-[family-name:var(--font-code)] text-[0.7rem] font-normal opacity-45">
+            .deb
+          </span>
+        </a>
+      </Button>
+      <Button asChild size="lg" variant="secondary">
         <a href={DOWNLOADS.android.href}>
           <Icon name="Smartphone" size={14} />
           Download for Android
@@ -37,6 +46,8 @@ export function PlatformChips({ className }: { className?: string }) {
       )}
     >
       <span>WINDOWS 10/11</span>
+      <span className="h-3 w-px bg-white/10" />
+      <span>UBUNTU 22.04+</span>
       <span className="h-3 w-px bg-white/10" />
       <span>ANDROID 8+</span>
       <span className="h-3 w-px bg-white/10" />

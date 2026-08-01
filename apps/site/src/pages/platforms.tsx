@@ -26,7 +26,7 @@ function Cell({ value }: { value: string | boolean }) {
 }
 
 export default function Platforms() {
-  const platforms = [DOWNLOADS.windows, DOWNLOADS.android]
+  const platforms = [DOWNLOADS.windows, DOWNLOADS.linux, DOWNLOADS.android]
 
   return (
     <>

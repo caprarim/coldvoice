@@ -1,0 +1,100 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "ColdVoice",
+  "version": "0.3.1",
+  "identifier": "com.coldvoice.app",
+  "build": {
+    "frontendDist": "../ui",
+    "beforeBuildCommand": "node tools/bundle-shared.js",
+    "beforeDevCommand": "node tools/bundle-shared.js"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "security": {
+      "csp": "default-src 'self' ipc: http://ipc.localhost; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost"
+    },
+    "windows": [
+      {
+        "label": "main",
+        "title": "ColdVoice",
+        "url": "index.html",
+        "width": 1040,
+        "height": 720,
+        "minWidth": 820,
+        "minHeight": 560,
+        "backgroundColor": "#15161b",
+        "visible": true
+      },
+      {
+        "label": "pill",
+        "url": "pill.html",
+        "width": 138,
+        "height": 22,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "shadow": false,
+        "resizable": true,
+        "visible": false
+      },
+      {
+        "label": "alert",
+        "url": "alert.html",
+        "width": 420,
+        "height": 96,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "shadow": false,
+        "resizable": false,
+        "visible": false
+      },
+      {
+        "label": "notice",
+        "url": "notice.html",
+        "width": 460,
+        "height": 92,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "shadow": false,
+        "resizable": false,
+        "visible": false
+      },
+      {
+        "label": "processor",
+        "url": "processor.html",
+        "width": 1,
+        "height": 1,
+        "decorations": false,
+        "skipTaskbar": true,
+        "resizable": false,
+        "visible": false
+      }
+    ]
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["deb", "appimage"],
+    "category": "Utility",
+    "shortDescription": "Offline voice dictation",
+    "longDescription": "ColdVoice is offline, privacy-first voice dictation. Press a hotkey, speak, and the cleaned-up text is inserted into whatever field already has focus.",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/icon.png"
+    ],
+    "resources": {
+      "../../../native/asr/whisper-cli": "native/asr/whisper-cli",
+      "../../../models/ggml-base.en.bin": "models/ggml-base.en.bin"
+    },
+    "linux": {
+      "deb": {
+        "depends": ["xdotool", "libasound2t64 | libasound2"]
+      }
+    }
+  }
+}

@@ -1,0 +1,9 @@
+# Generated from packages/shared at build time.
+ui/vendor/
+
+# Generated from icon.png by `npm run icons`.
+src-tauri/icons/*
+!src-tauri/icons/.gitkeep
+
+src-tauri/target/
+src-tauri/gen/

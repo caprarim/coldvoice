@@ -1,6 +1,6 @@
 # ColdVoice
 
-Privacy-first voice dictation for **Windows** and **Android**. Speak, and the cleaned
+Privacy-first voice dictation for **Windows**, **Linux** and **Android**. Speak, and the cleaned
 text lands in whatever field has focus. Transcription runs on-device by default, with
 an optional fast cloud path for grammar and formatting. No accounts, no telemetry.
 
@@ -11,6 +11,7 @@ Grab the latest build from the [Releases page](https://github.com/caprarim/coldv
 | Platform | File |
 | --- | --- |
 | Windows 10/11 (x64) | [ColdVoice-Setup.exe](https://github.com/caprarim/coldvoice/releases/latest/download/ColdVoice-Setup.exe) |
+| Ubuntu 22.04+ (x64) | [ColdVoice.deb](https://github.com/caprarim/coldvoice/releases/latest/download/ColdVoice.deb) · [ColdVoice.AppImage](https://github.com/caprarim/coldvoice/releases/latest/download/ColdVoice.AppImage) |
 | Android 8.0+ | [ColdVoice.apk](https://github.com/caprarim/coldvoice/releases/latest/download/ColdVoice.apk) |
 
 The desktop app also updates itself: Settings has a check-for-updates button that
@@ -85,7 +86,7 @@ mid-sentence:
 - **Cloud** (when AI is enabled, a key is set, and you're online): Groq Whisper turbo for
   speech, then Llama for real grammar and formatting. Short utterances skip the language
   model and go straight through the deterministic rules.
-- **Offline**: whisper.cpp on Windows, the bundled Vosk model on Android. Fully on-device,
+- **Offline**: whisper.cpp on Windows and Linux, the bundled Vosk model on Android. Fully on-device,
   cleaned by the deterministic pipeline in `packages/shared/text-processing`.
 
 If the cloud path fails for any reason, it falls back to offline without losing the
@@ -97,6 +98,7 @@ dictation.
 coldvoice/
   apps/
     windows-electron/   Electron desktop: hotkeys, pill, mic, ASR, insertion
+    linux-tauri/        Tauri v2 desktop for Ubuntu: same scenes, Rust core
     android/            Kotlin: accessibility bubble + optional voice keyboard
     website/            Static marketing site (Vercel)
   packages/shared/
@@ -121,6 +123,9 @@ npm test                  # shared package tests, no install needed
 npm run build:website
 npm run dist:windows      # needs npm install first
 ```
+
+Linux builds are produced by `.github/workflows/linux.yml` on an Ubuntu runner —
+see `apps/linux-tauri/README.md`.
 
 Android, from `apps/android` (needs `sdk.dir` in `local.properties`):
 

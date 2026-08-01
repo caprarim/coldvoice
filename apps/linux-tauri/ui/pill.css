@@ -1,0 +1,140 @@
+html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
+
+:root {
+  --bg: #15161b;
+  --bar: #e8eaef;
+}
+
+.pill {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 100%;
+  margin: 0;
+  padding: 0 3px;
+  background: var(--bg);
+  border-radius: 999px;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  -webkit-user-select: none;
+  user-select: none;
+  cursor: grab;
+}
+.pill:active { cursor: grabbing; }
+
+.side {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.side svg { width: 9px; height: 9px; }
+.cancel { background: #3a3d45; color: #e8eaef; }
+.cancel:hover { background: #e0556a; color: #fff; }
+.pause { background: #3a3d45; color: #e8eaef; }
+.pause:hover { background: #4a4e58; }
+.confirm { background: #f2f3f5; color: #17181d; }
+.confirm:hover { background: #fff; }
+
+/* The pause button swaps to a play glyph while paused. */
+.pause .ico-play { display: none; }
+.pill[data-state="paused"] .pause .ico-pause { display: none; }
+.pill[data-state="paused"] .pause .ico-play { display: block; }
+.pill[data-state="paused"] .pause { background: #f5b544; color: #17181d; }
+
+.center {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  overflow: hidden;
+}
+
+.bars {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  height: 12px;
+}
+.bars span {
+  width: 2px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--bar);
+  transform-origin: center;
+  transition: height 0.07s ease-out;
+}
+
+.label {
+  display: none;
+  color: #c2c6d0;
+  font-size: 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 0 4px;
+}
+
+/* Transcribing: gentle shimmer on the bars. */
+.pill[data-state="transcribing"] .bars span { animation: shimmer 1s infinite ease-in-out; background: #9aa0ad; }
+.bars span:nth-child(2)  { animation-delay: .06s; }
+.bars span:nth-child(3)  { animation-delay: .12s; }
+.bars span:nth-child(4)  { animation-delay: .18s; }
+.bars span:nth-child(5)  { animation-delay: .24s; }
+.bars span:nth-child(6)  { animation-delay: .30s; }
+.bars span:nth-child(7)  { animation-delay: .36s; }
+.bars span:nth-child(8)  { animation-delay: .42s; }
+.bars span:nth-child(9)  { animation-delay: .48s; }
+.bars span:nth-child(10) { animation-delay: .54s; }
+.bars span:nth-child(11) { animation-delay: .60s; }
+.bars span:nth-child(12) { animation-delay: .66s; }
+@keyframes shimmer { 0%,100% { height: 3px; } 50% { height: 9px; } }
+
+/* Paused: the waveform gives way to the label, same as the other text states,
+   so "Paused" gets the full centre and never truncates. */
+.pill[data-state="paused"] .bars { display: none; }
+.pill[data-state="paused"] .label { display: block; color: #f5b544; }
+
+/* The pause control only applies mid-dictation; elsewhere it stays in the
+   layout (so the click zones never move) but reads as unavailable. */
+.pill[data-state="idle"] .pause,
+.pill[data-state="info"] .pause,
+.pill[data-state="error"] .pause,
+.pill[data-state="done"] .pause,
+.pill[data-state="nomic"] .pause { opacity: 0.25; }
+
+/* Idle (always-on bar): tiny resting state, dimmed sides. */
+.pill[data-state="idle"] { opacity: 0.9; }
+.pill[data-state="idle"] .bars span { height: 3px; background: #6b7280; }
+.pill[data-state="idle"] .side { opacity: 0.5; }
+
+/* Text states (info / error / done): hide bars, show a label. */
+.pill[data-state="info"] .bars,
+.pill[data-state="error"] .bars,
+.pill[data-state="done"] .bars,
+.pill[data-state="nomic"] .bars { display: none; }
+.pill[data-state="info"] .label,
+.pill[data-state="error"] .label,
+.pill[data-state="done"] .label,
+.pill[data-state="nomic"] .label { display: block; }
+.pill[data-state="error"] .label { color: #ff8a9b; }
+.pill[data-state="done"] .label { color: #69e0a6; }
+
+.pill[data-state="nomic"] {
+  box-shadow: inset 0 0 0 1px #ff4d63;
+  animation: nomicThrob 1.1s ease-in-out infinite;
+}
+.pill[data-state="nomic"] .label { color: #ff5d70; font-weight: 700; }
+@keyframes nomicThrob {
+  0%, 100% { box-shadow: inset 0 0 0 1px #ff4d63; }
+  50% { box-shadow: inset 0 0 0 2px #ff4d63, inset 0 0 12px rgba(255, 77, 99, 0.7); }
+}

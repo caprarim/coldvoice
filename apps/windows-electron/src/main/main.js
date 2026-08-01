@@ -14,6 +14,7 @@ const db = require('./db');
 const asr = require('./asr');
 const pill = require('./pill');
 const alert = require('./alert');
+const notice = require('./notice');
 const keyhook = require('./keyhook');
 const mousehook = require('./mousehook');
 const insertion = require('./insertion');
@@ -411,6 +412,12 @@ function startDictation(mode = 'toggle') {
     pcm: [],
     queue: Promise.resolve(),
   };
+  notice.show({
+    kind: 'started',
+    title: 'ColdVoice has started dictating',
+    message: 'Listening. Speak now.',
+    timeoutMs: 2200,
+  });
   log(`dictation engine: ${dictationSession.cloud ? 'cloud (Groq)' : 'local (whisper.cpp)'}`);
   if (dictationSession.cloud) {
     groq.warm();
@@ -482,12 +489,26 @@ function stopDictation() {
   paused = false;
   const sent = sendRecorder('recorder:stop');
   try { globalShortcut.unregister('Escape'); } catch {}
+  notice.show({
+    kind: 'stopped',
+    title: 'ColdVoice has stopped dictating',
+    message: 'Transcribing, then inserting your text.',
+    timeoutMs: 2000,
+  });
   if (!sent) failDictation('Mic capture restarted');
   // The final segment + a 'recorder:done' arrive via their IPC handlers.
 }
 
 function cancelDictation() {
   if (noMicHold) return dismissNoMicHold();
+  if (recording) {
+    notice.show({
+      kind: 'stopped',
+      title: 'ColdVoice has stopped dictating',
+      message: 'Cancelled. Nothing was inserted.',
+      timeoutMs: 2000,
+    });
+  }
   cancelled = true;
   recording = false;
   paused = false;
@@ -1229,6 +1250,7 @@ if (!app.requestSingleInstanceLock()) {
     createRecorderWindow();
     pill.ensure();
     alert.ensure();
+    notice.ensure();
     createTray();
     sweepDeadTrayIcons();
     registerIpc();

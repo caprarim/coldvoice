@@ -16,6 +16,7 @@ const ALLOWED_ON = new Set([
   'recorder:start', 'recorder:stop', 'recorder:refresh', 'recorder:pause', 'recorder:resume',
   'pill:state', 'pill:level',
   'alert:show',
+  'notice:show',
   'app:connectivity', 'transcript:new', 'mic:status',
   'update:progress',
 ]);

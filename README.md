@@ -28,6 +28,9 @@ bar (the pill) shows what's happening and carries four controls:
 | ⏸ / ▶ | Pause the dictation, then carry on from exactly where you stopped |
 | ✓ | Stop and insert the text |
 
+A banner also drops in at the top centre of the screen the moment dictation starts, and
+again when it stops, so a hotkey press that didn't register is impossible to miss.
+
 The bar is a non-focusable always-on-top window so it never steals focus from the field
 you're dictating into. Because of that it gets no renderer mouse events at all, so its
 clicks and drags are driven from the global mouse hook in the main process.

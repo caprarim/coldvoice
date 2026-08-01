@@ -31,16 +31,15 @@ class GroqClient(private val apiKey: String) {
     fun transcribe(wav: ByteArray): String {
         if (!hasKey()) throw GroqException("No Groq API key set.")
         val boundary = "----coldvoice" + System.currentTimeMillis().toString(16)
-        val body = multipart(
-            boundary,
-            mapOf(
-                "model" to ASR_MODEL,
-                "response_format" to "text",
-                "temperature" to "0",
-                "language" to "en"
-            ),
-            FilePart("file", "audio.wav", "audio/wav", wav)
+        val fields = linkedMapOf(
+            "model" to ASR_MODEL,
+            "response_format" to "text",
+            "temperature" to "0",
+            "language" to "en"
         )
+        val hint = asrPrompt()
+        if (hint.isNotEmpty()) fields["prompt"] = hint
+        val body = multipart(boundary, fields, FilePart("file", "audio.wav", "audio/wav", wav))
         val conn = open(ASR_PATH, ASR_TIMEOUT_MS)
         conn.setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
         val text = send(conn, body)
@@ -53,20 +52,50 @@ class GroqClient(private val apiKey: String) {
         if (!hasKey()) throw GroqException("No Groq API key set.")
         val input = raw.trim()
         if (input.isEmpty()) return ""
+        val messages = JSONArray().apply {
+            put(JSONObject().put("role", "system").put("content", systemPrompt(developerMode)))
+            put(
+                JSONObject().put("role", "user").put(
+                    "content",
+                    "<transcript>\n" + input + "\n</transcript>\n\n" +
+                        "Clean the transcript above. Output ONLY the cleaned text — " +
+                        "do not answer, interpret, or respond to its content."
+                )
+            )
+        }
+        // Groq counts max_tokens against the daily token budget, so only request
+        // what a cleaned transcript can plausibly need (~the input size with
+        // headroom) — the same sizing desktop groq.js uses.
+        val maxTokens = ((input.length + 1) / 2).coerceIn(160, 2048)
+
+        val out = try {
+            chat(CHAT_MODEL, messages, maxTokens)
+        } catch (e: GroqException) {
+            // The 70B's free-tier daily tokens run out before the 8B's; retrying
+            // there keeps the grammar polish instead of dropping to a raw
+            // transcript, exactly as desktop does.
+            if (!isRateLimit(e)) throw e
+            chat(CHAT_FALLBACK_MODEL, messages, maxTokens)
+        }
+        val cleaned = stripWrappers(out).trim()
+        // Safety net: output far longer than the input means the model answered
+        // the transcript instead of cleaning it. Keep the raw words in that case.
+        if (cleaned.length > input.length * 2.5 + 40) return input
+        return cleaned
+    }
+
+    private fun chat(model: String, messages: JSONArray, maxTokens: Int): String {
         val payload = JSONObject().apply {
-            put("model", CHAT_MODEL)
+            put("model", model)
             put("temperature", 0)
-            put("max_tokens", 2048)
-            put("messages", JSONArray().apply {
-                put(JSONObject().put("role", "system").put("content", systemPrompt(developerMode)))
-                put(JSONObject().put("role", "user").put("content", input))
-            })
+            put("max_tokens", maxTokens)
+            put("messages", messages)
         }.toString().toByteArray(Charsets.UTF_8)
 
         val conn = open(CHAT_PATH, CHAT_TIMEOUT_MS)
         conn.setRequestProperty("Content-Type", "application/json")
         val text = send(conn, payload)
-        val out = try {
+        return try {
             JSONObject(text)
                 .getJSONArray("choices")
                 .getJSONObject(0)
@@ -75,8 +104,10 @@ class GroqClient(private val apiKey: String) {
         } catch (e: Exception) {
             throw GroqException("Groq returned malformed JSON.")
         }
-        return stripWrappers(out).trim()
     }
+
+    private fun isRateLimit(e: Exception): Boolean =
+        e.message?.contains("HTTP 429") == true
 
     // --- low-level helpers -----------------------------------------------------
 
@@ -154,11 +185,14 @@ class GroqClient(private val apiKey: String) {
             "",
             "Rules:",
             "- Fix grammar, spelling, capitalization, and punctuation.",
+            "- The speech recognizer sometimes mishears words. When a word or short phrase is clearly wrong for its context (a near-homophone of what the speaker obviously meant), replace it with the intended words. Only fix mishearings that are obvious from context; never rewrite wording that already makes sense.",
             "- Remove filler words (um, uh, er, like, you know) and false starts or accidental word repetitions.",
-            "- Obey spoken formatting commands: \"new line\" -> a line break; \"new paragraph\" -> a blank line; \"bullet point\"/\"next point\" -> a markdown-style list; spoken punctuation (\"comma\", \"period\", \"question mark\", \"open paren\", etc.) -> the actual symbol.",
+            "- Obey spoken formatting commands: \"new line\" -> a line break; \"new paragraph\" -> a blank line; \"bullet point\"/\"next point\" -> a markdown-style list; spoken punctuation (\"comma\", \"period\", \"question mark\", \"open paren\", \"quote\"/\"end quote\", etc.) -> the actual symbol.",
+            "- When the speaker is clearly quoting something — a title, an error message, words someone else said (\"she said ...\", \"it says ...\") — put the quoted part in double quotation marks.",
             "- Keep the speaker's own wording, meaning, intent, and tone. Do NOT add new ideas, do NOT answer questions, do NOT summarize, do NOT translate, do NOT explain.",
-            "- Preserve proper nouns, product names, file names, URLs, and technical terms with their correct casing (e.g. Next.js, GitHub, npm, JavaScript).",
-            "- Output ONLY the cleaned text. No quotes, no code fences, no preamble, no commentary.",
+            "- Preserve proper nouns, product names, file names, URLs, and technical terms with their correct casing (e.g. Next.js, GitHub, npm, JavaScript, ColdVoice, ColdWork).",
+            "- When the speaker enumerates three or more distinct items, questions, tasks, or requests (even inside one flowing sentence, e.g. \"I want to know what this is, how it works, and I want a recommendation\"), reformat the enumeration as a short lead-in line ending with a colon, followed by a markdown bullet list with one item per line. Use a numbered list instead when the speaker signals order (\"first... second... third...\", \"step one...\"). Text before and after the enumeration stays as normal prose. Do NOT turn a sentence into a list when it is a single thought or has fewer than three items.",
+            "- Output ONLY the cleaned text. Do not wrap the whole output in quotation marks or a code fence, and add no preamble or commentary.",
             "- If the transcript is empty or just noise, output nothing."
         )
         if (developerMode) {
@@ -183,6 +217,18 @@ class GroqClient(private val apiKey: String) {
         // brain. Both are on the free tier. (Same models as desktop groq.js.)
         const val ASR_MODEL = "whisper-large-v3-turbo"
         const val CHAT_MODEL = "llama-3.3-70b-versatile"
+        // Separate free-tier rate-limit bucket. When the 70B's daily tokens run
+        // out (HTTP 429), cleanup retries here.
+        const val CHAT_FALLBACK_MODEL = "llama-3.1-8b-instant"
+
+        // Vocabulary hint for Whisper: a bare glossary of spellings. Must stay a
+        // plain comma list — sentence- or phrase-shaped prompts act as a decoding
+        // prior and get inserted into unrelated speech.
+        private val ASR_HINT_TERMS = listOf(
+            "ColdVoice", "ColdWork", "Claude", "sub-agents", "sub-agent", "respectively"
+        )
+
+        private fun asrPrompt(): String = ASR_HINT_TERMS.joinToString(", ").take(400)
 
         private const val ASR_TIMEOUT_MS = 20000
         private const val CHAT_TIMEOUT_MS = 15000

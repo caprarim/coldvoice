@@ -368,8 +368,14 @@ class ColdVoiceImeService : InputMethodService(), DictationController.Callbacks 
 
     override fun onCommit(text: String) {
         if (!InsertionGuard.canInsert(currentInputEditorInfo)) return
-        val piece = if (dictated.isEmpty()) text else " $text"
-        currentInputConnection?.commitText(piece, 1)
+        val ic = currentInputConnection ?: return
+        // Space off whatever is already in front of the caret, not just previous
+        // chunks of this dictation — otherwise speaking into a field that already
+        // ends in a word runs the two together.
+        val before = ic.getTextBeforeCursor(1, 0)?.toString().orEmpty()
+        val needsSpace = before.isNotEmpty() && !before.last().isWhitespace()
+        val piece = if (needsSpace) " $text" else text
+        ic.commitText(piece, 1)
         dictated.append(piece)
     }
 

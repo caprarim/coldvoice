@@ -62,13 +62,22 @@ class VoskAsrEngine(private val context: Context) {
      * Feed a chunk of 16 kHz PCM16 samples. Returns a finalized phrase when the
      * recognizer hits a silence boundary, otherwise null (a live transcript is
      * available via [partial]).
+     *
+     * Synchronized with the lifecycle methods below: audio arrives on the mic
+     * thread while [end], [cancel] and [close] run on the main thread, and a Vosk
+     * [Recognizer] is a native handle with no locking of its own. Reading a
+     * handle that another thread is closing is a segfault, and it killed the
+     * whole IME or accessibility service — after which nothing dictated until
+     * Android restarted it.
      */
+    @Synchronized
     fun accept(buf: ShortArray, len: Int): String? {
         val rec = recognizer ?: return null
         return if (rec.acceptWaveForm(buf, len)) textOf(rec.result, "text") else null
     }
 
     /** Current live partial transcript (may be empty). */
+    @Synchronized
     fun partial(): String {
         val rec = recognizer ?: return ""
         return textOf(rec.partialResult, "partial")
@@ -82,6 +91,42 @@ class VoskAsrEngine(private val context: Context) {
         rec.close()
         recognizer = null
         return text
+    }
+
+    /**
+     * Decode one complete clip in a single pass and return everything recognized.
+     *
+     * This is the rescue path for a cloud attempt that failed after the audio was
+     * already captured: the recording still becomes text on-device instead of
+     * being thrown away. It builds its own recognizer so a live streaming
+     * utterance, if there somehow is one, is left untouched.
+     */
+    @Synchronized
+    fun transcribeClip(samples: ShortArray): String {
+        val m = model ?: return ""
+        val rec = Recognizer(m, SAMPLE_RATE)
+        return try {
+            val out = StringBuilder()
+            fun add(phrase: String) {
+                if (phrase.isEmpty()) return
+                if (out.isNotEmpty()) out.append(' ')
+                out.append(phrase)
+            }
+            var i = 0
+            while (i < samples.size) {
+                val len = minOf(CHUNK_SAMPLES, samples.size - i)
+                val chunk = samples.copyOfRange(i, i + len)
+                if (rec.acceptWaveForm(chunk, len)) add(textOf(rec.result, "text"))
+                i += len
+            }
+            add(textOf(rec.finalResult, "text"))
+            out.toString()
+        } catch (e: Exception) {
+            Log.e(TAG, "Offline clip decode failed", e)
+            ""
+        } finally {
+            try { rec.close() } catch (_: Exception) {}
+        }
     }
 
     /** Abort the current stream, discarding buffered audio. */
@@ -136,5 +181,7 @@ class VoskAsrEngine(private val context: Context) {
         private const val MARKER = ".unpacked"
         private const val MARKER_VALUE = "v1"
         private const val SAMPLE_RATE = 16000f
+        /** Half a second of 16 kHz audio per acceptWaveForm call. */
+        private const val CHUNK_SAMPLES = 8000
     }
 }

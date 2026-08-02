@@ -60,9 +60,9 @@ class ColdVoiceBubbleService : AccessibilityService(), DictationController.Callb
     private var offsetX = 0
     private var offsetY = 0
 
-    // The text already in the field when dictation started, plus everything
-    // dictated this session, so confirming never wipes what was already typed.
-    private var baseText = ""
+    // Everything dictated this session. What the field already held is re-read at
+    // insertion time instead of being snapshotted, so nothing typed while the
+    // pill was open is lost and no stale placeholder can be carried forward.
     private val dictated = StringBuilder()
     private val main = Handler(Looper.getMainLooper())
 
@@ -280,13 +280,23 @@ class ColdVoiceBubbleService : AccessibilityService(), DictationController.Callb
     }
 
     private fun collapse() {
+        // Both flags have to clear here. evaluateFocus() refuses to touch the
+        // overlay while either is set, so leaving `expanded` true on the detach
+        // path — which is what happened whenever the field lost focus during a
+        // dictation — permanently wedged the bubble: it never came back, and
+        // there was no way to dictate again short of restarting the service.
         listening = false
+        expanded = false
         if (focusedNode != null) showCollapsed() else detach()
     }
 
     /** Tick: end the dictation and write the result into the field. */
     private fun onConfirmTapped() {
-        if (!listening) { collapse(); return }
+        // A controller that never got started (mic busy, permission pulled) would
+        // ignore stop(), leaving the pill spinning on "transcribing" forever with
+        // `listening` stuck true. Fold up instead of waiting for a callback that
+        // is never coming.
+        if (!listening || controller?.isActive != true) { collapse(); return }
         pill?.setState(PillView.State.TRANSCRIBING)
         controller?.stop()
     }
@@ -304,7 +314,6 @@ class ColdVoiceBubbleService : AccessibilityService(), DictationController.Callb
     }
 
     private fun startListening() {
-        baseText = currentFieldText()
         dictated.setLength(0)
         listening = true
         pill?.setState(PillView.State.RECORDING)
@@ -349,46 +358,95 @@ class ColdVoiceBubbleService : AccessibilityService(), DictationController.Callb
     }
 
     override fun onComplete(fullText: String) {
-        writeField(combine())
         val all = dictated.toString().trim()
-        if (all.isNotBlank()) copyToClipboard(all)
+        if (all.isNotBlank()) writeField(all)
     }
 
     /**
-     * What the user has actually typed into the focused field.
+     * What the user has actually typed into [node] — empty when the field is
+     * showing its placeholder.
      *
-     * An empty editor reports its placeholder as its text — Google's search box
-     * answers "Ask Google" — so taking the node's text at face value made every
-     * dictation land appended to the placeholder. The hint is filtered out, and
-     * the node is refreshed first so the snapshot taken at focus time can't hand
-     * back stale contents.
+     * An empty editor reports its placeholder as its text: Google's search box
+     * answers "Ask Google", Gemini's answers "Ask Gemini". `isShowingHintText`
+     * and `hintText` are the documented way to tell those apart from real
+     * content, but a large share of apps never set either — Chrome and every
+     * WebView-hosted field publish the placeholder as the node's
+     * contentDescription instead, and some custom editors publish it as nothing
+     * at all. Relying on the documented flags alone is what put "Ask Google" in
+     * front of every dictation. So all three sources are checked, and a field
+     * whose entire contents look like a placeholder with the caret still parked
+     * at position zero is treated as empty too.
      */
-    private fun currentFieldText(): String {
-        val node = focusedNode ?: return ""
-        try { node.refresh() } catch (_: Exception) {}
-        if (node.isShowingHintText) return ""
+    private fun fieldText(node: AccessibilityNodeInfo): String {
         val text = node.text?.toString().orEmpty()
-        val hint = node.hintText?.toString().orEmpty()
-        if (hint.isNotEmpty() && text.trim() == hint.trim()) return ""
+        if (text.isBlank()) return ""
+        if (node.isShowingHintText) return ""
+        val body = text.trim()
+        val hint = node.hintText?.toString().orEmpty().trim()
+        if (hint.isNotEmpty() && body.equals(hint, ignoreCase = true)) return ""
+        val description = node.contentDescription?.toString().orEmpty().trim()
+        if (description.isNotEmpty() && body.equals(description, ignoreCase = true)) return ""
+        if (looksLikePlaceholder(body) && node.textSelectionEnd <= 0) return ""
         return text
     }
 
-    /** The field's original contents plus everything dictated this session. */
-    private fun combine(): String {
-        val parts = ArrayList<String>()
-        if (baseText.isNotBlank()) parts.add(baseText.trim())
-        if (dictated.isNotBlank()) parts.add(dictated.toString().trim())
-        return parts.joinToString(" ")
+    /**
+     * The shape of an app's empty-field prompt: a short, unpunctuated call to
+     * action. Only consulted when the caret says the field was never typed in,
+     * so a real sentence that happens to start this way is still kept.
+     */
+    private fun looksLikePlaceholder(text: String): Boolean {
+        if (text.length > PLACEHOLDER_MAX_CHARS) return false
+        if (text.last() in ".!?,;:") return false
+        return PLACEHOLDER_SHAPE.matches(text)
     }
 
+    /** Live contents of the focused editor, or "" when it is showing a placeholder. */
+    private fun currentFieldText(): String {
+        val node = focusedNode ?: return ""
+        try { node.refresh() } catch (_: Exception) {}
+        return try { fieldText(node) } catch (_: Exception) { "" }
+    }
+
+    /**
+     * Put the finished text into the field.
+     *
+     * Pasting is tried first: it drops the text in at the caret, replaces the
+     * selection if there is one, and needs no idea of what the field already
+     * held — so a placeholder can never be swept up into the result. Editors
+     * that don't offer a paste action fall back to rewriting the field, and only
+     * that path has to reason about existing contents, which it re-reads live
+     * rather than trusting the snapshot taken when dictation started.
+     */
     private fun writeField(text: String) {
         if (text.isBlank()) return
-        val node = focusedNode ?: findFocus(AccessibilityNodeInfo.FOCUS_INPUT) ?: return
+        val node = liveEditor() ?: return
         if (!InsertionGuard.canInsert(node, node.packageName)) return
+        copyToClipboard(text)
+        if (node.performAction(AccessibilityNodeInfo.ACTION_PASTE)) return
+        setFieldText(node, joinWithExisting(fieldText(node), text))
+    }
+
+    /** The focused editor as it exists right now, not as it was at start. */
+    private fun liveEditor(): AccessibilityNodeInfo? {
+        focusedNode?.let { node ->
+            val alive = try { node.refresh() } catch (_: Exception) { false }
+            if (alive) return node
+        }
+        return editableFocus(deep = true)
+    }
+
+    private fun joinWithExisting(existing: String, dictatedText: String): String {
+        val head = existing.trim()
+        if (head.isEmpty()) return dictatedText
+        return "$head $dictatedText"
+    }
+
+    private fun setFieldText(node: AccessibilityNodeInfo, text: String) {
         val args = Bundle().apply {
             putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
         }
-        node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
+        if (!node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)) return
         val end = Bundle().apply {
             putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT, text.length)
             putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT, text.length)
@@ -440,5 +498,15 @@ class ColdVoiceBubbleService : AccessibilityService(), DictationController.Callb
         const val BUBBLE_DP = 64
         const val PILL_W_DP = 252
         const val PILL_H_DP = 60
+
+        const val PLACEHOLDER_MAX_CHARS = 48
+        /**
+         * "Ask Google", "Ask Gemini", "Search or type URL", "Message", "Type a
+         * message", "Send a message to Claude" — the empty-state prompt apps put
+         * in a field they have nothing in.
+         */
+        val PLACEHOLDER_SHAPE = Regex(
+            "(?i)^(ask|search|message|chat|talk|type|write|enter|say|send|add|start|reply|compose|tell|describe|find)\\b.*"
+        )
     }
 }

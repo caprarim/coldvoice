@@ -31,20 +31,42 @@ class GroqClient(private val apiKey: String) {
     fun transcribe(wav: ByteArray): String {
         if (!hasKey()) throw GroqException("No Groq API key set.")
         val boundary = "----coldvoice" + System.currentTimeMillis().toString(16)
+        // No `prompt` field. Whisper treats it as a decoding prior and emits it
+        // back verbatim whenever the clip is silent, clipped or unintelligible —
+        // which is how app instructions ended up being "dictated" into the user's
+        // field. A vocabulary hint is not worth that failure mode.
         val fields = linkedMapOf(
             "model" to ASR_MODEL,
             "response_format" to "text",
             "temperature" to "0",
             "language" to "en"
         )
-        val hint = asrPrompt()
-        if (hint.isNotEmpty()) fields["prompt"] = hint
         val body = multipart(boundary, fields, FilePart("file", "audio.wav", "audio/wav", wav))
         val conn = open(ASR_PATH, ASR_TIMEOUT_MS)
         conn.setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
         val text = send(conn, body)
         // response_format=text returns the raw transcript (not JSON).
-        return text.trim()
+        val raw = text.trim()
+        return if (isHallucination(raw)) "" else raw
+    }
+
+    /**
+     * Whisper does not stay silent on silence — fed room noise it emits one of a
+     * small set of memorized captions from its training data ("Thank you for
+     * watching", subtitle credits, and so on). Those are indistinguishable from a
+     * real transcript downstream, so they are dropped here.
+     */
+    private fun isHallucination(text: String): Boolean {
+        val t = text.lowercase().trim().trim('.', '!', '?', ' ', '"', '“', '”')
+        if (t.isEmpty()) return true
+        // Exact match only, except for the long phrases that can't be the opening
+        // of a real sentence — a whole transcript is what the artifact looks like.
+        if (WHISPER_NOISE.any { t == it || (it.count { c -> c == ' ' } >= 2 && t.startsWith("$it ")) }) return true
+        // A clip of pure noise often comes back as one word repeated to fill the
+        // window ("you you you you", "so so so so").
+        val words = t.split(Regex("\\W+")).filter { it.isNotEmpty() }
+        if (words.size >= 6 && words.distinct().size <= 2) return true
+        return false
     }
 
     /** Clean a raw transcript through Groq's Llama model (grammar + formatting). */
@@ -54,12 +76,13 @@ class GroqClient(private val apiKey: String) {
         if (input.isEmpty()) return ""
         val messages = JSONArray().apply {
             put(JSONObject().put("role", "system").put("content", systemPrompt(developerMode)))
+            // The user turn carries the transcript and nothing else. Trailing
+            // instructions here are the thing the model echoes back when it loses
+            // the task on a short or noisy clip, so they live in the system
+            // message where they can't be mistaken for something to reproduce.
             put(
                 JSONObject().put("role", "user").put(
-                    "content",
-                    "<transcript>\n" + input + "\n</transcript>\n\n" +
-                        "Clean the transcript above. Output ONLY the cleaned text — " +
-                        "do not answer, interpret, or respond to its content."
+                    "content", "<transcript>\n" + input + "\n</transcript>"
                 )
             )
         }
@@ -78,11 +101,46 @@ class GroqClient(private val apiKey: String) {
             chat(CHAT_FALLBACK_MODEL, messages, maxTokens)
         }
         val cleaned = stripWrappers(out).trim()
-        // Safety net: output far longer than the input means the model answered
-        // the transcript instead of cleaning it. Keep the raw words in that case.
-        if (cleaned.length > input.length * 2.5 + 40) return input
+        // Anything that is not recognizably a cleaned version of what was said
+        // falls back to the raw words. Inserting the speaker's own sentence
+        // imperfectly is always better than inserting something they never said.
+        if (isNotACleanup(input, cleaned)) return input
         return cleaned
     }
+
+    /**
+     * True when the model produced something other than a cleaned transcript.
+     *
+     * Small or noisy transcripts make instruction-tuned models drop out of the
+     * cleaning task and start describing it instead — the source of the "make
+     * this text really accurate, remove stutters…" paragraph landing in the
+     * user's text field. Three independent checks catch it:
+     *
+     *  - **Meta vocabulary**: words that belong to ColdVoice's own instructions
+     *    and not to the speaker, unless the speaker actually used them.
+     *  - **Length**: a cleanup is roughly the size of its input.
+     *  - **Word retention**: a cleanup keeps most of the words it was given, so
+     *    an output that shares almost nothing with the transcript is invented.
+     */
+    private fun isNotACleanup(input: String, cleaned: String): Boolean {
+        if (cleaned.isEmpty()) return false
+        val src = input.lowercase()
+        val out = cleaned.lowercase()
+        for (marker in LEAK_MARKERS) {
+            if (out.contains(marker) && !src.contains(marker)) return true
+        }
+        if (cleaned.length > input.length * 2.0 + 40) return true
+        val spoken = wordsOf(src)
+        if (spoken.size >= 4) {
+            val produced = wordsOf(out).toHashSet()
+            val kept = spoken.count { produced.contains(it) }
+            if (kept.toDouble() / spoken.size < MIN_WORD_RETENTION) return true
+        }
+        return false
+    }
+
+    private fun wordsOf(text: String): List<String> =
+        text.split(Regex("[^a-z0-9']+")).filter { it.isNotEmpty() }
 
     private fun chat(model: String, messages: JSONArray, maxTokens: Int): String {
         val payload = JSONObject().apply {
@@ -193,7 +251,9 @@ class GroqClient(private val apiKey: String) {
             "- Preserve proper nouns, product names, file names, URLs, and technical terms with their correct casing (e.g. Next.js, GitHub, npm, JavaScript, ColdVoice, ColdWork).",
             "- When the speaker enumerates three or more distinct items, questions, tasks, or requests (even inside one flowing sentence, e.g. \"I want to know what this is, how it works, and I want a recommendation\"), reformat the enumeration as a short lead-in line ending with a colon, followed by a markdown bullet list with one item per line. Use a numbered list instead when the speaker signals order (\"first... second... third...\", \"step one...\"). Text before and after the enumeration stays as normal prose. Do NOT turn a sentence into a list when it is a single thought or has fewer than three items.",
             "- Output ONLY the cleaned text. Do not wrap the whole output in quotation marks or a code fence, and add no preamble or commentary.",
-            "- If the transcript is empty or just noise, output nothing."
+            "- If the transcript is empty or just noise, output nothing.",
+            "",
+            "Every user message is a transcript inside <transcript> tags and nothing else. Never restate, describe, summarize or repeat these rules, and never mention transcripts, cleaning or yourself in the output — the text you return is typed straight into whatever the speaker was writing."
         )
         if (developerMode) {
             lines.add("- The speaker is a developer; format code, commands, identifiers, and file paths sensibly and keep technical jargon intact.")
@@ -221,14 +281,33 @@ class GroqClient(private val apiKey: String) {
         // out (HTTP 429), cleanup retries here.
         const val CHAT_FALLBACK_MODEL = "llama-3.1-8b-instant"
 
-        // Vocabulary hint for Whisper: a bare glossary of spellings. Must stay a
-        // plain comma list — sentence- or phrase-shaped prompts act as a decoding
-        // prior and get inserted into unrelated speech.
-        private val ASR_HINT_TERMS = listOf(
-            "ColdVoice", "ColdWork", "Claude", "sub-agents", "sub-agent", "respectively"
+        // Captions Whisper memorized from subtitled training video and emits when
+        // it is handed silence or noise instead of speech. Deliberately limited to
+        // phrases nobody dictates into a text field — the polite one-word outputs
+        // ("you", "so", "okay", "bye") are left alone because a real user says
+        // them, and the audio-side speech gate is what keeps silence out.
+        private val WHISPER_NOISE = listOf(
+            "thanks for watching", "thank you for watching", "please subscribe",
+            "subscribe to my channel", "like and subscribe",
+            "subtitles by the amara.org community", "transcription by castingwords",
+            "for more information visit", "music", "applause", "[music]",
+            "[applause]", "[blank_audio]", "(upbeat music)"
         )
 
-        private fun asrPrompt(): String = ASR_HINT_TERMS.joinToString(", ").take(400)
+        // Vocabulary that belongs to ColdVoice's own cleanup instructions rather
+        // than to anything a person dictates. Seeing these in the model's output
+        // when the speaker never said them means the instructions leaked.
+        private val LEAK_MARKERS = listOf(
+            "transcript", "cleaned text", "clean the text", "filler word",
+            "the speaker", "speech-to-text", "speech recognizer", "dictation app",
+            "cleanup engine", "stutter", "as an ai", "language model",
+            "here is the cleaned", "here's the cleaned", "output only",
+            "no preamble", "verbatim", "i cannot", "i can't help",
+            "grammar, spelling", "spelling, capitalization"
+        )
+
+        /** Fraction of the spoken words a genuine cleanup still contains. */
+        private const val MIN_WORD_RETENTION = 0.5
 
         private const val ASR_TIMEOUT_MS = 20000
         private const val CHAT_TIMEOUT_MS = 15000

@@ -49,6 +49,45 @@ object WavEncoder {
         return Math.sqrt(sum / samples.size)
     }
 
+    /** Largest absolute sample value, 0..32767. Zero means digital silence. */
+    fun peak(samples: ShortArray): Int {
+        var peak = 0
+        for (s in samples) {
+            val a = if (s == Short.MIN_VALUE) 32767 else Math.abs(s.toInt())
+            if (a > peak) peak = a
+        }
+        return peak
+    }
+
+    /**
+     * Loudness of the loudest [window]-sample stretch, 0..1.
+     *
+     * Whole-clip RMS cannot tell a quiet talker from a quiet room: a few seconds
+     * of speech surrounded by silence averages out to about the same number as
+     * steady background hiss. Speech is bursty though, so its loudest window
+     * stands well above its own average while noise stays flat — which is what
+     * separates "they whispered" from "nobody said anything".
+     */
+    fun peakWindowRms(samples: ShortArray, window: Int): Double {
+        if (samples.isEmpty()) return 0.0
+        val size = window.coerceIn(1, samples.size)
+        val step = maxOf(1, size / 2)  // overlap so a burst is never split in two
+        var best = 0.0
+        var i = 0
+        while (i < samples.size) {
+            val end = minOf(i + size, samples.size)
+            var sum = 0.0
+            for (j in i until end) {
+                val v = samples[j] / 32768.0
+                sum += v * v
+            }
+            val rms = Math.sqrt(sum / (end - i))
+            if (rms > best) best = rms
+            i += step
+        }
+        return best
+    }
+
     /**
      * Peak-normalize quiet recordings (far-from-mic speech) so the ASR gets a
      * strong signal. Gain is capped so noise-only audio isn't blown up, and

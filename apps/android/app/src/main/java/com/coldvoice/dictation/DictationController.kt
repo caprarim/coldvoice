@@ -70,6 +70,8 @@ class DictationController(
     private var recorder: MicRecorder? = null
     private val pcm = ArrayList<Short>()
     private var lastLevelSent = 0L
+    /** Whether the mic delivered anything but digital silence this utterance. */
+    @Volatile private var heardSignal = false
 
     init {
         // Unpack + load the offline model off the main thread so on-device
@@ -89,10 +91,20 @@ class DictationController(
     /** Which engine the *next* start would use, for status display. */
     fun plannedEngine(): Engine = if (cloudReady()) Engine.CLOUD else Engine.OFFLINE
 
+    /**
+     * Set when a cloud attempt fails. Being online with a valid-looking key says
+     * nothing about whether Groq will actually answer — a rate-limited free tier
+     * looks exactly like a healthy one until the request comes back. Without this
+     * every retry re-picked the cloud and failed the same way, so dictation
+     * stayed broken for as long as the limit lasted.
+     */
+    @Volatile private var cloudBlockedUntil = 0L
+
     private fun cloudReady(): Boolean =
         Settings.aiEnabled(context) &&
             !Settings.offlineMode(context) &&
             Settings.hasGroqKey(context) &&
+            System.currentTimeMillis() >= cloudBlockedUntil &&
             Connectivity.isOnline(context)
 
     fun start() {
@@ -175,18 +187,22 @@ class DictationController(
 
     private fun startVosk() {
         vosk.begin()
+        heardSignal = false
         val rec = MicRecorder { samples -> onVoskSamples(samples) }
         recorder = rec
         try {
             rec.start()
         } catch (e: Exception) {
             active = false
-            post { callbacks.onState(State.ERROR, "Microphone error: ${e.message}") }
+            recorder = null
+            vosk.cancel()
+            post { callbacks.onState(State.ERROR, micMessage(e)) }
         }
     }
 
     private fun onVoskSamples(samples: ShortArray) {
         if (!active || cancelled || paused) return
+        if (!heardSignal && WavEncoder.peak(samples) > 0) heardSignal = true
         // Stream a coarse level (~25 fps) for the live waveform.
         val now = System.currentTimeMillis()
         if (now - lastLevelSent > 40) {
@@ -207,11 +223,19 @@ class DictationController(
         // Flip active off first so any in-flight mic callback bails before we
         // close the recognizer below.
         active = false
-        try { recorder?.stop() } catch (_: Exception) {}
+        val mic = recorder
+        try { mic?.stop() } catch (_: Exception) {}
+        val micError = mic?.lastError()
         recorder = null
         post { callbacks.onState(State.TRANSCRIBING) }
         // Flush any trailing phrase the recognizer was still forming.
         commitChunk(vosk.end())
+        if (assembled.isEmpty() && !heardSignal) {
+            // The mic handed back nothing but zeroes for the whole utterance, so
+            // no recognizer was ever going to find words in it.
+            post { callbacks.onState(State.ERROR, micError ?: MUTED_MIC) }
+            return
+        }
         finishWithAssembled()
     }
 
@@ -269,18 +293,26 @@ class DictationController(
 
     private fun startCloud() {
         pcm.clear()
+        heardSignal = false
         val rec = MicRecorder { samples -> onCloudSamples(samples) }
         recorder = rec
         try {
             rec.start()
         } catch (e: Exception) {
             active = false
-            post { callbacks.onState(State.ERROR, "Microphone error: ${e.message}") }
+            recorder = null
+            post { callbacks.onState(State.ERROR, micMessage(e)) }
         }
     }
 
+    /** [MicRecorder] already words its failures for a person; anything else is a bug. */
+    private fun micMessage(e: Exception): String =
+        if (e is MicRecorder.MicException) e.message.orEmpty()
+        else "Microphone error: ${e.message}"
+
     private fun onCloudSamples(samples: ShortArray) {
         if (!active || cancelled || paused) return
+        if (!heardSignal && WavEncoder.peak(samples) > 0) heardSignal = true
         synchronized(pcm) { for (s in samples) pcm.add(s) }
         // Stream a coarse level (~25 fps) for the live waveform.
         val now = System.currentTimeMillis()
@@ -292,13 +324,23 @@ class DictationController(
     }
 
     private fun stopCloud() {
-        try { recorder?.stop() } catch (_: Exception) {}
+        val mic = recorder
+        try { mic?.stop() } catch (_: Exception) {}
+        val micError = mic?.lastError()
         recorder = null
         val samples = synchronized(pcm) { pcm.toShortArray().also { pcm.clear() } }
         active = false
 
         val durationMs = samples.size * 1000L / SAMPLE_RATE
-        if (samples.isEmpty() || durationMs < MIN_MS || WavEncoder.rms(samples) < SILENCE_RMS) {
+        if (samples.isEmpty() || durationMs < MIN_MS) {
+            post { callbacks.onState(State.INFO, micError ?: "No speech detected") }
+            return
+        }
+        if (WavEncoder.peak(samples) == 0) {
+            post { callbacks.onState(State.ERROR, micError ?: MUTED_MIC) }
+            return
+        }
+        if (!hasSpeech(samples)) {
             post { callbacks.onState(State.INFO, "No speech detected") }
             return
         }
@@ -307,6 +349,7 @@ class DictationController(
         val key = Settings.groqApiKey(context)
         val developerMode = Settings.developerMode(context)
         thread(name = "coldvoice-groq") {
+            var text = ""
             try {
                 // Boost quiet audio so Whisper hears it clearly. The cap is high
                 // enough that an actual whisper still reaches the model at a
@@ -316,40 +359,61 @@ class DictationController(
                 )
                 val client = GroqClient(key)
                 val raw = client.transcribe(wav).trim()
-                if (raw.isBlank()) {
-                    post { callbacks.onState(State.INFO, "No speech detected") }
-                    return@thread
-                }
                 // Same split as desktop main.js: very short utterances go straight
                 // through the deterministic rules (an LLM round-trip would cost
                 // more latency than it's worth), everything else gets the real
                 // grammar + formatting pass. A failed polish keeps the accurate
                 // cloud transcript rather than throwing the dictation away.
-                val text = if (raw.split(Regex("\\s+")).size <= SHORT_UTTERANCE_WORDS) {
-                    TextPipeline.process(raw).trim()
-                } else {
-                    try {
+                text = when {
+                    raw.isBlank() -> ""
+                    raw.split(Regex("\\s+")).size <= SHORT_UTTERANCE_WORDS ->
+                        TextPipeline.process(raw).trim()
+                    else -> try {
                         TextPipeline.applyUserRules(client.cleanText(raw, developerMode)).trim()
                     } catch (e: Exception) {
                         TextPipeline.process(raw).trim()
                     }
                 }
-                if (text.isBlank()) {
-                    post { callbacks.onState(State.INFO, "No speech detected") }
-                } else {
-                    assembled.append(text)
-                    post {
-                        callbacks.onCommit(text)
-                        finishWithAssembled()
-                    }
-                }
             } catch (e: Exception) {
-                // Cloud failed (rate-limited, dropped connection, bad key). The next
-                // dictation re-evaluates connectivity and will use the offline path.
-                post { callbacks.onState(State.ERROR, "Cloud unavailable — tap to retry") }
+                // Cloud is unreachable, rate-limited or refusing the key. The
+                // recording still exists, so decode it on-device rather than
+                // making the user say it all again, and stop choosing the cloud
+                // for a while so the next few dictations are simply fast.
+                cloudBlockedUntil = System.currentTimeMillis() + CLOUD_COOLDOWN_MS
+                text = TextPipeline.process(offlineRescue(samples)).trim()
+                if (text.isBlank()) {
+                    post { callbacks.onState(State.ERROR, "Cloud unavailable — tap to retry") }
+                    return@thread
+                }
+            }
+            if (text.isBlank()) {
+                post { callbacks.onState(State.INFO, "No speech detected") }
+            } else {
+                assembled.append(text)
+                post {
+                    callbacks.onCommit(text)
+                    finishWithAssembled()
+                }
             }
         }
     }
+
+    /** Last-resort on-device decode of an already-recorded clip. */
+    private fun offlineRescue(samples: ShortArray): String {
+        if (!vosk.ready && !vosk.load()) return ""
+        return vosk.transcribeClip(samples)
+    }
+
+    /**
+     * Whether the clip actually contains someone talking. Both tests have to pass:
+     * enough overall energy to clear the noise floor, and a loud enough burst
+     * somewhere inside it. The burst test is what stops a quiet room from being
+     * amplified [WHISPER_MAX_GAIN]x into something Whisper will confidently
+     * transcribe as words that were never spoken.
+     */
+    private fun hasSpeech(samples: ShortArray): Boolean =
+        WavEncoder.rms(samples) >= SILENCE_RMS &&
+            WavEncoder.peakWindowRms(samples, SAMPLE_RATE / 5) >= SPEECH_PEAK_RMS
 
     private fun finishWithAssembled() {
         val full = assembled.toString().trim()
@@ -373,8 +437,18 @@ class DictationController(
         // it away as silence. This is set just above the noise floor of a quiet
         // room instead, and the gain below carries the rest.
         private const val SILENCE_RMS = 0.0006
+        /**
+         * Minimum loudness of the clip's loudest fifth of a second. Steady room
+         * noise never reaches it; even a whisper does, because speech comes in
+         * bursts. See [hasSpeech].
+         */
+        private const val SPEECH_PEAK_RMS = 0.0015
         private const val WHISPER_MAX_GAIN = 26.0
         private const val SHORT_UTTERANCE_WORDS = 3
+        /** How long to stay off the cloud after it fails. */
+        private const val CLOUD_COOLDOWN_MS = 5 * 60 * 1000L
+        private const val MUTED_MIC =
+            "No audio from the microphone. Close other apps using it, then try again."
         /** Waveform sensitivity — high enough that a whisper still visibly moves it. */
         private const val LEVEL_GAIN = 14.0
     }

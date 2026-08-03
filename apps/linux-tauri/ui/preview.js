@@ -8,7 +8,7 @@ const cv = window.coldvoice;
 const card = document.getElementById('card');
 const textEl = document.getElementById('text');
 const editorEl = document.getElementById('editor');
-const metaEl = document.getElementById('meta');
+const countEl = document.getElementById('count');
 const fillEl = document.getElementById('fill');
 const copyBtn = document.getElementById('copy');
 const copyLabel = document.getElementById('copy-label');
@@ -72,7 +72,7 @@ cv.on('preview:show', (payload) => {
   text = p.text || '';
   textEl.textContent = text;
   editorEl.value = text;
-  metaEl.textContent = `${p.words || 0} words`;
+  countEl.textContent = `${p.words || 0} words`;
   copyBtn.classList.remove('done');
   copyLabel.textContent = 'Copy';
   textEl.scrollTop = 0;
@@ -99,7 +99,7 @@ function save() {
   if (!next) return;
   text = next;
   textEl.textContent = next;
-  metaEl.textContent = `${next.split(/\s+/).filter(Boolean).length} words`;
+  countEl.textContent = `${next.split(/\s+/).filter(Boolean).length} words`;
   cv.send('preview:action', { action: 'save', text: next });
   setMode('view');
 }

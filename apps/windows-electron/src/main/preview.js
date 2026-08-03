@@ -20,26 +20,26 @@ let remaining = 0;
 let lastTick = 0;
 let topTimer = null;
 
-const WIDTH = 380;
-const MIN_HEIGHT = 132;
+const WIDTH = 360;
+const MIN_HEIGHT = 168;
 const MAX_HEIGHT = 420;
-// Everything above and below the text block: 14px top inset + 70px of meta,
-// button row and progress bar. Kept in step with preview.css.
-const CHROME_HEIGHT = 84;
-const MARGIN = 18;
+// Everything around the transcript panel: 36px above it, 88px of button rows
+// and timer bar below, plus its 1px borders. The reported height already
+// includes the panel's own padding. Kept in step with preview.css.
+const CHROME_HEIGHT = 126;
+const MARGIN = 20;
 const DISMISS_MS = 5000;
 const TICK_MS = 100;
 
-// Click zones in CSS pixels. X is measured from the left edge, Y from the
-// BOTTOM edge, because the card grows to fit the transcript.
+// Click zones in CSS pixels. X is measured from the left edge; Y is measured
+// from whichever edge the control is pinned to, because the card grows
+// downward-anchored to fit the transcript.
 const BUTTONS = [
-  { id: 'copy', x0: 14, x1: 98 },
-  { id: 'edit', x0: 102, x1: 174 },
-  { id: 'open', x0: 178, x1: 304 },
-  { id: 'close', x0: 330, x1: 366 },
+  { id: 'close', x0: 322, x1: 350, fromTop: [4, 34] },
+  { id: 'copy', x0: 10, x1: 178, fromBottom: [48, 80] },
+  { id: 'edit', x0: 182, x1: 350, fromBottom: [48, 80] },
+  { id: 'open', x0: 10, x1: 350, fromBottom: [10, 42] },
 ];
-const ROW_TOP_FROM_BOTTOM = 46;
-const ROW_BOTTOM_FROM_BOTTOM = 12;
 
 function ensure() {
   if (win && !win.isDestroyed()) return win;
@@ -84,12 +84,12 @@ function ensure() {
   return win;
 }
 
-// Always anchored to the bottom-left corner, so growing the card pushes its
+// Always anchored to the bottom-right corner, so growing the card pushes its
 // top edge up instead of walking it off the screen.
 function place(height) {
   const wa = screen.getPrimaryDisplay().workArea;
   win.setBounds({
-    x: wa.x + MARGIN,
+    x: wa.x + wa.width - WIDTH - MARGIN,
     y: wa.y + wa.height - height - MARGIN,
     width: WIDTH,
     height,
@@ -185,10 +185,13 @@ function buttonAtCursor() {
   const c = screen.getCursorScreenPoint();
   if (c.x < b.x || c.x >= b.x + b.width || c.y < b.y || c.y >= b.y + b.height) return null;
   const cssX = c.x - b.x;
+  const fromTop = c.y - b.y;
   const fromBottom = b.y + b.height - c.y;
-  if (fromBottom > ROW_TOP_FROM_BOTTOM || fromBottom < ROW_BOTTOM_FROM_BOTTOM) return null;
   for (const btn of BUTTONS) {
-    if (cssX >= btn.x0 && cssX < btn.x1) return btn.id;
+    if (cssX < btn.x0 || cssX >= btn.x1) continue;
+    const [lo, hi] = btn.fromTop || btn.fromBottom;
+    const y = btn.fromTop ? fromTop : fromBottom;
+    if (y >= lo && y < hi) return btn.id;
   }
   return null;
 }

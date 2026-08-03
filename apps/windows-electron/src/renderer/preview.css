@@ -1,102 +1,134 @@
+/* Sizes, paddings and palette mirror the ColdShot preview card: 12px gutters,
+   8px gaps, 10px row spacing, a sunken panel and a 2px timer bar. */
 :root {
-  --surface: #101116;
-  --surface-2: #1b1d25;
-  --border: #2a2d38;
-  --fg: #e9ebf2;
-  --muted: #868c9e;
-  --accent: #22d3ee;
-  --accent-deep: #0e7490;
+  --zinc-950: #09090b;
+  --zinc-900: #18181b;
+  --zinc-800: #27272a;
+  --zinc-700: #3f3f46;
+  --zinc-400: #a1a1aa;
+  --zinc-300: #d4d4d8;
+  --zinc-200: #e4e4e7;
+  --cyan-600: #0891b2;
+  --cyan-500: #06b6d4;
 }
 
 html, body {
   margin: 0;
   height: 100%;
   overflow: hidden;
-  background: var(--surface);
+  background: var(--zinc-900);
   font-family: "Segoe UI", ui-sans-serif, system-ui, sans-serif;
   -webkit-user-select: none;
   user-select: none;
 }
 
-/* The button row is hit-tested from the main process against fixed pixel
-   boxes measured from the card's bottom-left corner, so its geometry may not
-   change without updating BUTTONS in main/preview.js. */
+/* The buttons are hit-tested from the main process against fixed pixel boxes
+   measured from the card's edges, so this geometry may not change without
+   updating BUTTONS in main/preview.js. */
 .card {
   position: relative;
   box-sizing: border-box;
   height: 100%;
-  background: var(--surface);
-  border: 1px solid var(--border);
+  background: var(--zinc-900);
+  border: 1px solid var(--zinc-700);
   border-radius: 12px;
-  box-shadow: 0 14px 38px -10px rgba(0, 0, 0, 0.8);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.85);
   overflow: hidden;
-  animation: enter 160ms cubic-bezier(0.16, 1, 0.3, 1);
+  animation: enter 150ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 @keyframes enter {
-  from { opacity: 0; transform: translateY(10px); }
+  from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: none; }
 }
 
-.text {
+.count {
   position: absolute;
-  left: 16px;
-  right: 16px;
-  top: 14px;
-  bottom: 70px;
+  left: 12px;
+  top: 11px;
+  height: 14px;
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 14px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--zinc-400);
+}
+
+.close {
+  position: absolute;
+  right: 12px;
+  top: 6px;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #71717a;
+  cursor: pointer;
+}
+
+.close svg { width: 13px; height: 13px; }
+
+.panel {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  top: 36px;
+  bottom: 88px;
+  box-sizing: border-box;
+  padding: 9px 11px;
+  border: 1px solid var(--zinc-700);
+  border-radius: 8px;
+  background: var(--zinc-950);
   overflow-y: auto;
-  font-size: 13.5px;
+  font-size: 13px;
   line-height: 19px;
-  color: var(--fg);
+  color: var(--zinc-200);
   white-space: pre-wrap;
   overflow-wrap: break-word;
 }
 
-.text::-webkit-scrollbar { width: 6px; }
-.text::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+.panel::-webkit-scrollbar { width: 6px; }
+.panel::-webkit-scrollbar-thumb { background: var(--zinc-700); border-radius: 3px; }
 
 .editor {
   position: absolute;
-  left: 16px;
-  right: 16px;
-  top: 14px;
-  bottom: 52px;
+  left: 12px;
+  right: 12px;
+  top: 36px;
+  bottom: 50px;
   display: none;
   box-sizing: border-box;
-  padding: 8px 10px;
+  padding: 9px 11px;
   resize: none;
-  border: 1px solid var(--accent-deep);
+  border: 1px solid var(--cyan-600);
   border-radius: 8px;
-  background: var(--surface-2);
-  color: var(--fg);
+  background: var(--zinc-950);
+  color: var(--zinc-200);
   font-family: inherit;
-  font-size: 13.5px;
+  font-size: 13px;
   line-height: 19px;
   -webkit-user-select: text;
   user-select: text;
 }
 
-.editor:focus { outline: none; border-color: var(--accent); }
-
-.meta {
-  position: absolute;
-  left: 16px;
-  bottom: 49px;
-  height: 14px;
-  font-size: 11px;
-  line-height: 14px;
-  color: var(--muted);
-}
+.editor:focus { outline: none; border-color: var(--cyan-500); }
 
 .row {
   position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 15px;
+  left: 12px;
+  right: 12px;
   height: 28px;
 }
 
-.edit-row { display: none; }
+.row-main { bottom: 50px; }
+.row-open { bottom: 12px; }
+.row-edit { bottom: 12px; display: none; }
 
 .btn {
   position: absolute;
@@ -108,49 +140,48 @@ html, body {
   justify-content: center;
   gap: 6px;
   box-sizing: border-box;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface-2);
-  color: var(--fg);
+  border: 0;
+  border-radius: 6px;
+  background: var(--zinc-800);
+  color: var(--zinc-200);
   font-family: inherit;
   font-size: 12px;
-  font-weight: 550;
+  font-weight: 500;
   cursor: pointer;
 }
 
-.btn svg { width: 14px; height: 14px; }
-.btn.accent { border-color: transparent; background: var(--accent-deep); color: #f2fdff; }
-.btn.icon { color: var(--muted); }
+.btn svg { width: 13px; height: 13px; }
+.btn.primary { background: var(--cyan-600); color: #fff; }
 
-#copy { left: 16px; width: 80px; }
-#copy.done { background: #15803d; color: #f0fdf4; }
-#edit { left: 104px; width: 68px; }
-#open { left: 180px; width: 122px; }
-#close { left: 332px; width: 32px; }
-#save { left: 16px; width: 84px; }
-#cancel { left: 108px; width: 78px; }
+#copy { left: 0; width: 164px; }
+#copy.done { background: #059669; color: #fff; }
+#edit { left: 172px; width: 164px; }
+#open { left: 0; right: 0; width: auto; background: rgba(39, 39, 42, 0.7); color: var(--zinc-300); }
+#save { left: 0; width: 164px; }
+#cancel { left: 172px; width: 164px; }
 
 .bar {
   position: absolute;
   left: 0;
   right: 0;
   bottom: 0;
-  height: 3px;
-  background: #23252e;
+  height: 2px;
+  background: var(--zinc-800);
 }
 
 .fill {
   height: 100%;
   width: 100%;
-  background: var(--accent);
-  opacity: 0.75;
+  background: rgba(6, 182, 212, 0.7);
   transition: width 100ms linear;
 }
 
-.card[data-mode="edit"] .text,
-.card[data-mode="edit"] .meta,
-.card[data-mode="edit"] .row,
+.card[data-mode="edit"] .panel,
+.card[data-mode="edit"] .count,
+.card[data-mode="edit"] .close,
+.card[data-mode="edit"] .row-main,
+.card[data-mode="edit"] .row-open,
 .card[data-mode="edit"] .bar { display: none; }
 
 .card[data-mode="edit"] .editor { display: block; }
-.card[data-mode="edit"] .edit-row { display: block; }
+.card[data-mode="edit"] .row-edit { display: block; }

@@ -4,7 +4,7 @@ const cv = window.coldvoice;
 const card = document.getElementById('card');
 const textEl = document.getElementById('text');
 const editorEl = document.getElementById('editor');
-const metaEl = document.getElementById('meta');
+const countEl = document.getElementById('count');
 const fillEl = document.getElementById('fill');
 const copyBtn = document.getElementById('copy');
 const copyLabel = document.getElementById('copy-label');
@@ -21,7 +21,7 @@ cv.on('preview:show', (payload) => {
   const p = payload || {};
   textEl.textContent = p.text || '';
   editorEl.value = p.text || '';
-  metaEl.textContent = `${p.words || 0} words`;
+  countEl.textContent = `${p.words || 0} words`;
   copyBtn.classList.remove('done');
   copyLabel.textContent = 'Copy';
   textEl.scrollTop = 0;

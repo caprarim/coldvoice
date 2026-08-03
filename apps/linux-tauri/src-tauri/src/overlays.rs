@@ -18,12 +18,12 @@ const ALERT_HEIGHT: f64 = 96.0;
 const NOTICE_WIDTH: f64 = 460.0;
 const NOTICE_HEIGHT: f64 = 92.0;
 const NOTICE_TOP_MARGIN: f64 = 24.0;
-const PREVIEW_WIDTH: f64 = 380.0;
-const PREVIEW_MIN_HEIGHT: f64 = 132.0;
+const PREVIEW_WIDTH: f64 = 360.0;
+const PREVIEW_MIN_HEIGHT: f64 = 168.0;
 const PREVIEW_MAX_HEIGHT: f64 = 420.0;
-// Everything above and below the transcript block, kept in step with preview.css.
-const PREVIEW_CHROME: f64 = 84.0;
-const PREVIEW_MARGIN: f64 = 18.0;
+// Everything around the transcript panel, kept in step with preview.css.
+const PREVIEW_CHROME: f64 = 126.0;
+const PREVIEW_MARGIN: f64 = 20.0;
 
 static ALERT_GEN: AtomicU64 = AtomicU64::new(0);
 // The transcript row the visible card belongs to, so an edit lands on the row
@@ -135,14 +135,14 @@ pub fn notice_show(app: &AppHandle, kind: &str, title: &str, message: &str, time
 // --- preview (finished transcript card) --------------------------------------
 // The card counts itself down and asks to be closed, so there is no timer here.
 
-// Always anchored to the bottom-left corner, so growing the card pushes its top
-// edge up instead of walking it off the screen.
+// Always anchored to the bottom-right corner, so growing the card pushes its
+// top edge up instead of walking it off the screen.
 fn preview_place(app: &AppHandle, height: f64) {
     let Some(win) = app.get_webview_window("preview") else { return };
-    let (ax, ay, _aw, ah) = work_area(app);
+    let (ax, ay, aw, ah) = work_area(app);
     let _ = win.set_size(LogicalSize::new(PREVIEW_WIDTH, height));
     let _ = win.set_position(LogicalPosition::new(
-        ax + PREVIEW_MARGIN,
+        ax + aw - PREVIEW_WIDTH - PREVIEW_MARGIN,
         ay + ah - height - PREVIEW_MARGIN,
     ));
 }

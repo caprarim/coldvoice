@@ -65,6 +65,19 @@
         "visible": false
       },
       {
+        "label": "preview",
+        "url": "preview.html",
+        "width": 340,
+        "height": 152,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "shadow": false,
+        "resizable": false,
+        "visible": false
+      },
+      {
         "label": "processor",
         "url": "processor.html",
         "width": 1,

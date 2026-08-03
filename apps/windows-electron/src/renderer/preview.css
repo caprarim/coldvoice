@@ -1,0 +1,136 @@
+:root {
+  --background: 240 10% 3.9%;
+  --foreground: 0 0% 98%;
+  --muted-foreground: 240 5% 64.9%;
+  --border: 240 3.7% 15.9%;
+  --accent-rgb: 34 197 94;
+}
+
+html, body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: hsl(var(--background));
+  font-family: "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Every child is absolutely positioned: main hit-tests clicks against these
+   exact pixel boxes, so the layout may not reflow. */
+.card {
+  position: relative;
+  box-sizing: border-box;
+  height: 100%;
+  background: hsl(var(--background));
+  border: 1px solid hsl(var(--border));
+  border-radius: 12px;
+  box-shadow: 0 12px 34px -8px rgba(0, 0, 0, 0.75);
+  overflow: hidden;
+  animation: enter 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes enter {
+  from { opacity: 0; transform: translateY(12px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+
+.card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(110% 130% at 0% 0%, rgba(var(--accent-rgb), 0.13), transparent 55%);
+}
+
+.head {
+  position: absolute;
+  left: 16px;
+  top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.head .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: rgb(var(--accent-rgb));
+}
+
+.head .brand {
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgb(var(--accent-rgb));
+}
+
+.close {
+  position: absolute;
+  left: 302px;
+  top: 10px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: hsl(var(--muted-foreground));
+  cursor: pointer;
+}
+
+.close svg { width: 15px; height: 15px; }
+
+.text {
+  position: absolute;
+  left: 16px;
+  top: 44px;
+  width: 308px;
+  height: 54px;
+  font-size: 13px;
+  line-height: 18px;
+  color: hsl(var(--foreground));
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.meta {
+  position: absolute;
+  left: 16px;
+  top: 100px;
+  font-size: 11px;
+  line-height: 14px;
+  color: hsl(var(--muted-foreground));
+}
+
+.btn {
+  position: absolute;
+  top: 116px;
+  height: 26px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 8px;
+  background: #17181d;
+  color: hsl(var(--foreground));
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 550;
+  cursor: pointer;
+}
+
+.btn svg { width: 14px; height: 14px; }
+
+#copy { left: 16px; width: 78px; border-color: rgba(var(--accent-rgb), 0.45); }
+#copy.done { background: rgba(var(--accent-rgb), 0.16); color: rgb(var(--accent-rgb)); }
+#open { left: 102px; width: 118px; }

@@ -15,6 +15,7 @@ const asr = require('./asr');
 const pill = require('./pill');
 const alert = require('./alert');
 const notice = require('./notice');
+const preview = require('./preview');
 const keyhook = require('./keyhook');
 const mousehook = require('./mousehook');
 const insertion = require('./insertion');
@@ -412,6 +413,7 @@ function startDictation(mode = 'toggle') {
     pcm: [],
     queue: Promise.resolve(),
   };
+  preview.hide();
   notice.show({
     kind: 'started',
     title: 'ColdVoice has started dictating',
@@ -883,6 +885,9 @@ async function handleDone(data) {
     lastTranscript = final;
     db.saveTranscript(raw, final, lastTarget.appId, durationMs);
     notifyTranscript();
+    // Bottom-left card with the finished text, for apps ColdVoice cannot type
+    // into: copy it from there, or open the main window.
+    preview.show({ text: final });
 
     if (final) {
       // When "insert on release" is off, just copy — never auto-paste.
@@ -983,6 +988,7 @@ function registerIpc() {
   ipcMain.handle('db:upsertSnippet', (_e, s) => db.upsertSnippet(s));
   ipcMain.handle('db:deleteSnippet', (_e, id) => { db.deleteSnippet(id); return true; });
   ipcMain.handle('db:listTranscripts', (_e, limit) => db.listTranscripts(limit || 200));
+  ipcMain.handle('db:updateTranscript', (_e, { id, text }) => { db.updateTranscript(id, text); return true; });
   ipcMain.handle('db:deleteTranscript', (_e, id) => { db.deleteTranscript(id); return true; });
   ipcMain.handle('db:clearTranscripts', () => { db.clearTranscripts(); return true; });
   ipcMain.handle('db:transcriptStats', () => db.transcriptStats());
@@ -1132,6 +1138,21 @@ function onPillButton(id) {
   else if (id === 'confirm') stopDictation();
 }
 
+function onPreviewButton(id) {
+  if (!id) return;
+  log(`preview: ${id} clicked`);
+  if (id === 'copy') {
+    const text = preview.currentText();
+    if (text) clipboard.writeText(text);
+    preview.copied();
+  } else if (id === 'open') {
+    preview.hide();
+    showMain();
+  } else if (id === 'close') {
+    preview.hide();
+  }
+}
+
 function startMousePasteHook() {
   mousehook.start((button, className, processName) => {
     // Pill dragging and its buttons both ride the same global poller: press
@@ -1143,6 +1164,10 @@ function startMousePasteHook() {
     if (button === 'LU') {
       const clicked = pill.dragEnd();
       if (clicked) onPillButton(clicked);
+      return;
+    }
+    if (button === 'L' && preview.hitTest()) {
+      onPreviewButton(preview.buttonAtCursor());
       return;
     }
     if (button === 'L' && alert.hitTest()) {
@@ -1251,6 +1276,7 @@ if (!app.requestSingleInstanceLock()) {
     pill.ensure();
     alert.ensure();
     notice.ensure();
+    preview.ensure();
     createTray();
     sweepDeadTrayIcons();
     registerIpc();

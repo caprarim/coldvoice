@@ -18,8 +18,12 @@ const ALERT_HEIGHT: f64 = 96.0;
 const NOTICE_WIDTH: f64 = 460.0;
 const NOTICE_HEIGHT: f64 = 92.0;
 const NOTICE_TOP_MARGIN: f64 = 24.0;
+const PREVIEW_WIDTH: f64 = 340.0;
+const PREVIEW_HEIGHT: f64 = 152.0;
+const PREVIEW_MARGIN: f64 = 18.0;
 
 static ALERT_GEN: AtomicU64 = AtomicU64::new(0);
+static PREVIEW_GEN: AtomicU64 = AtomicU64::new(0);
 static NOTICE_GEN: AtomicU64 = AtomicU64::new(0);
 static NOTICE_VISIBLE: AtomicBool = AtomicBool::new(false);
 
@@ -121,6 +125,48 @@ pub fn notice_show(app: &AppHandle, kind: &str, title: &str, message: &str, time
             let _ = win.hide();
         }
     });
+}
+
+// --- preview (finished transcript card) --------------------------------------
+pub fn preview_show(app: &AppHandle, text: &str, timeout_ms: u64) {
+    let body = text.trim();
+    if body.is_empty() {
+        return;
+    }
+    let Some(win) = app.get_webview_window("preview") else { return };
+    let (ax, ay, _aw, ah) = work_area(app);
+    let _ = win.set_size(LogicalSize::new(PREVIEW_WIDTH, PREVIEW_HEIGHT));
+    let _ = win.set_position(LogicalPosition::new(
+        ax + PREVIEW_MARGIN,
+        ay + ah - PREVIEW_HEIGHT - PREVIEW_MARGIN,
+    ));
+    let _ = win.set_always_on_top(true);
+    emit_to(
+        app,
+        "preview",
+        "preview:show",
+        json!({ "text": body, "words": body.split_whitespace().count() }),
+    );
+    let _ = win.show();
+
+    let gen = PREVIEW_GEN.fetch_add(1, Ordering::SeqCst) + 1;
+    let app = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(timeout_ms));
+        if PREVIEW_GEN.load(Ordering::SeqCst) != gen {
+            return;
+        }
+        if let Some(win) = app.get_webview_window("preview") {
+            let _ = win.hide();
+        }
+    });
+}
+
+pub fn preview_hide(app: &AppHandle) {
+    PREVIEW_GEN.fetch_add(1, Ordering::SeqCst);
+    if let Some(win) = app.get_webview_window("preview") {
+        let _ = win.hide();
+    }
 }
 
 // --- alert (mic problems) ----------------------------------------------------

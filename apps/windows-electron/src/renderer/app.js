@@ -156,11 +156,28 @@ routes.home = async () => {
       ]),
       el('div', { class: 'row-actions' }, [
         iconBtn('copy', 'Copy', (e) => { copyText(text); flash(e); }),
+        iconBtn('edit', 'Edit', () => transcriptModal(t, text)),
         iconBtn('trash', 'Delete', async () => { await cv.invoke('db:deleteTranscript', t.id); navigate('home'); }),
       ]),
     ]));
   }
 };
+
+function transcriptModal(t, text) {
+  const body = el('textarea', {});
+  body.value = text;
+  openModal({
+    title: 'Edit dictation',
+    submitLabel: 'Save',
+    body: el('div', {}, [el('label', { text: 'Text' }), body]),
+    onSubmit: async () => {
+      const next = body.value.trim();
+      if (!next) return false;
+      await cv.invoke('db:updateTranscript', { id: t.id, text: next });
+      navigate('home');
+    },
+  });
+}
 
 // --- Insights --------------------------------------------------------------
 function gauge(value, max) {

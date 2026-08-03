@@ -17,6 +17,7 @@ const ALLOWED_ON = new Set([
   'pill:state', 'pill:level',
   'alert:show',
   'notice:show',
+  'preview:show', 'preview:copied',
   'app:connectivity', 'transcript:new', 'mic:status',
   'update:progress',
 ]);
@@ -25,7 +26,7 @@ const ALLOWED_INVOKE = new Set([
   'db:getSettings', 'db:setSetting',
   'db:listDictionary', 'db:upsertDictionary', 'db:deleteDictionary',
   'db:listSnippets', 'db:upsertSnippet', 'db:deleteSnippet',
-  'db:listTranscripts', 'db:deleteTranscript', 'db:clearTranscripts', 'db:transcriptStats',
+  'db:listTranscripts', 'db:updateTranscript', 'db:deleteTranscript', 'db:clearTranscripts', 'db:transcriptStats',
   'asr:status', 'ai:status', 'ai:test',
   'app:isOnline', 'auth:status', 'auth:signIn', 'auth:signOut',
   'mic:status', 'app:openSoundSettings',

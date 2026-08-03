@@ -287,6 +287,7 @@ fn start_dictation(app: &AppHandle, mode: &str) {
         d.capture = Some(capture);
     }
 
+    overlays::preview_hide(app);
     overlays::notice_show(
         app,
         "started",
@@ -662,6 +663,9 @@ async fn run_session(
         );
     }
     let _ = app.emit("transcript:new", json!({}));
+    // Bottom-left card with the finished text, for apps ColdVoice cannot type
+    // into: copy it from there, or open the main window.
+    overlays::preview_show(&app, &final_text, 14000);
 
     // When "insert on release" is off, just copy — never auto-paste.
     if state.setting("dictation.insertOnRelease", "1") != "1" {
@@ -1056,6 +1060,13 @@ fn db_list_transcripts(state: State<'_, AppState>, limit: Option<i64>) -> Value 
 }
 
 #[tauri::command]
+fn db_update_transcript(state: State<'_, AppState>, id: i64, text: String) -> bool {
+    let conn = state.conn.lock().unwrap();
+    db::update_transcript(&conn, id, &text);
+    true
+}
+
+#[tauri::command]
 fn db_delete_transcript(state: State<'_, AppState>, id: i64) -> bool {
     let conn = state.conn.lock().unwrap();
     db::delete_transcript(&conn, id);
@@ -1219,6 +1230,26 @@ fn pill_save_position(app: AppHandle, state: State<'_, AppState>, scale: Option<
 fn alert_dismiss(app: AppHandle) -> bool {
     logf!("alert: dismissed");
     overlays::alert_hide(&app);
+    true
+}
+
+#[tauri::command]
+fn preview_action(app: AppHandle, state: State<'_, AppState>, action: String, text: Option<String>) -> bool {
+    logf!("preview: {} clicked", action);
+    match action.as_str() {
+        "copy" => {
+            let body = text.unwrap_or_default();
+            if !body.trim().is_empty() {
+                state.clip_write(&body);
+            }
+        }
+        "open" => {
+            overlays::preview_hide(&app);
+            show_main(&app);
+        }
+        "close" => overlays::preview_hide(&app),
+        _ => {}
+    }
     true
 }
 
@@ -1391,6 +1422,7 @@ pub fn run() {
             db_upsert_snippet,
             db_delete_snippet,
             db_list_transcripts,
+            db_update_transcript,
             db_delete_transcript,
             db_clear_transcripts,
             db_transcript_stats,
@@ -1410,6 +1442,7 @@ pub fn run() {
             pill_action,
             pill_save_position,
             alert_dismiss,
+            preview_action,
             pipeline_result,
             update_check,
             update_download,

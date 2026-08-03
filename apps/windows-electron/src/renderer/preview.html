@@ -1,0 +1,40 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'" />
+    <title>ColdVoice</title>
+    <link rel="stylesheet" href="preview.css" />
+  </head>
+  <body>
+    <div class="card" id="card">
+      <div class="head">
+        <span class="dot"></span>
+        <span class="brand">Dictation ready</span>
+      </div>
+      <button class="close" id="close" title="Close" aria-label="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <path d="M6 6l12 12M18 6 6 18" />
+        </svg>
+      </button>
+      <div class="text" id="text"></div>
+      <div class="meta" id="meta"></div>
+      <button class="btn primary" id="copy">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="9" y="9" width="11" height="11" rx="2" />
+          <path d="M5 15V5a2 2 0 0 1 2-2h8" />
+        </svg>
+        <span id="copy-label">Copy</span>
+      </button>
+      <button class="btn" id="open">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M14 4h6v6" />
+          <path d="M20 4 11 13" />
+          <path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" />
+        </svg>
+        <span>Open ColdVoice</span>
+      </button>
+    </div>
+    <script src="preview.js"></script>
+  </body>
+</html>

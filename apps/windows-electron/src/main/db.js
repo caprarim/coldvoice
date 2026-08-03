@@ -127,6 +127,11 @@ function listTranscripts(limit = 200) {
   );
 }
 
+function updateTranscript(id, text) {
+  const t = String(text == null ? '' : text);
+  get().run('UPDATE transcripts SET final_text = ?, word_count = ? WHERE id = ?', [t, wordCount(t), id]);
+}
+
 function deleteTranscript(id) {
   get().run('DELETE FROM transcripts WHERE id = ?', [id]);
 }
@@ -244,6 +249,6 @@ module.exports = {
   init, get, getSetting, setSetting, allSettings,
   listDictionary, upsertDictionary, deleteDictionary,
   listSnippets, upsertSnippet, deleteSnippet,
-  saveTranscript, listTranscripts, deleteTranscript, clearTranscripts, transcriptStats,
+  saveTranscript, listTranscripts, updateTranscript, deleteTranscript, clearTranscripts, transcriptStats,
   dictionaryForPipeline, snippetsForPipeline,
 };

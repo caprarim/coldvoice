@@ -238,6 +238,13 @@ pub fn list_transcripts(conn: &Connection, limit: i64) -> Value {
     Value::Array(out)
 }
 
+pub fn update_transcript(conn: &Connection, id: i64, text: &str) {
+    let _ = conn.execute(
+        "UPDATE transcripts SET final_text = ?, word_count = ? WHERE id = ?",
+        params![text, util::word_count(text), id],
+    );
+}
+
 pub fn delete_transcript(conn: &Connection, id: i64) {
     let _ = conn.execute("DELETE FROM transcripts WHERE id = ?", params![id]);
 }

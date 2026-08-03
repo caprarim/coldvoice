@@ -10,6 +10,7 @@ const ALLOWED_SEND = new Set([
   'recorder:micStatus',
   'pill:cancel', 'pill:confirm',
   'alert:dismiss',
+  'preview:resize', 'preview:save', 'preview:cancelEdit',
 ]);
 
 const ALLOWED_ON = new Set([
@@ -17,7 +18,7 @@ const ALLOWED_ON = new Set([
   'pill:state', 'pill:level',
   'alert:show',
   'notice:show',
-  'preview:show', 'preview:copied',
+  'preview:show', 'preview:copied', 'preview:tick', 'preview:mode',
   'app:connectivity', 'transcript:new', 'mic:status',
   'update:progress',
 ]);

@@ -7,7 +7,7 @@
 // before pasting, so the pill briefly taking focus cannot misdirect a dictation.
 
 use serde_json::{json, Value};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU64, Ordering};
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager};
 
@@ -18,12 +18,17 @@ const ALERT_HEIGHT: f64 = 96.0;
 const NOTICE_WIDTH: f64 = 460.0;
 const NOTICE_HEIGHT: f64 = 92.0;
 const NOTICE_TOP_MARGIN: f64 = 24.0;
-const PREVIEW_WIDTH: f64 = 340.0;
-const PREVIEW_HEIGHT: f64 = 152.0;
+const PREVIEW_WIDTH: f64 = 380.0;
+const PREVIEW_MIN_HEIGHT: f64 = 132.0;
+const PREVIEW_MAX_HEIGHT: f64 = 420.0;
+// Everything above and below the transcript block, kept in step with preview.css.
+const PREVIEW_CHROME: f64 = 84.0;
 const PREVIEW_MARGIN: f64 = 18.0;
 
 static ALERT_GEN: AtomicU64 = AtomicU64::new(0);
-static PREVIEW_GEN: AtomicU64 = AtomicU64::new(0);
+// The transcript row the visible card belongs to, so an edit lands on the row
+// that was just saved. -1 means nothing stored (history off).
+static PREVIEW_ID: AtomicI64 = AtomicI64::new(-1);
 static NOTICE_GEN: AtomicU64 = AtomicU64::new(0);
 static NOTICE_VISIBLE: AtomicBool = AtomicBool::new(false);
 
@@ -128,18 +133,28 @@ pub fn notice_show(app: &AppHandle, kind: &str, title: &str, message: &str, time
 }
 
 // --- preview (finished transcript card) --------------------------------------
-pub fn preview_show(app: &AppHandle, text: &str, timeout_ms: u64) {
+// The card counts itself down and asks to be closed, so there is no timer here.
+
+// Always anchored to the bottom-left corner, so growing the card pushes its top
+// edge up instead of walking it off the screen.
+fn preview_place(app: &AppHandle, height: f64) {
+    let Some(win) = app.get_webview_window("preview") else { return };
+    let (ax, ay, _aw, ah) = work_area(app);
+    let _ = win.set_size(LogicalSize::new(PREVIEW_WIDTH, height));
+    let _ = win.set_position(LogicalPosition::new(
+        ax + PREVIEW_MARGIN,
+        ay + ah - height - PREVIEW_MARGIN,
+    ));
+}
+
+pub fn preview_show(app: &AppHandle, text: &str, id: Option<i64>) {
     let body = text.trim();
     if body.is_empty() {
         return;
     }
     let Some(win) = app.get_webview_window("preview") else { return };
-    let (ax, ay, _aw, ah) = work_area(app);
-    let _ = win.set_size(LogicalSize::new(PREVIEW_WIDTH, PREVIEW_HEIGHT));
-    let _ = win.set_position(LogicalPosition::new(
-        ax + PREVIEW_MARGIN,
-        ay + ah - PREVIEW_HEIGHT - PREVIEW_MARGIN,
-    ));
+    PREVIEW_ID.store(id.unwrap_or(-1), Ordering::SeqCst);
+    preview_place(app, PREVIEW_MIN_HEIGHT);
     let _ = win.set_always_on_top(true);
     emit_to(
         app,
@@ -148,22 +163,28 @@ pub fn preview_show(app: &AppHandle, text: &str, timeout_ms: u64) {
         json!({ "text": body, "words": body.split_whitespace().count() }),
     );
     let _ = win.show();
+}
 
-    let gen = PREVIEW_GEN.fetch_add(1, Ordering::SeqCst) + 1;
-    let app = app.clone();
-    std::thread::spawn(move || {
-        std::thread::sleep(Duration::from_millis(timeout_ms));
-        if PREVIEW_GEN.load(Ordering::SeqCst) != gen {
-            return;
-        }
-        if let Some(win) = app.get_webview_window("preview") {
-            let _ = win.hide();
-        }
-    });
+// The card measures its laid-out transcript and asks for a height that shows
+// all of it; anything past the maximum scrolls inside the card.
+pub fn preview_resize(app: &AppHandle, content_height: f64) {
+    let Some(win) = app.get_webview_window("preview") else { return };
+    if !win.is_visible().unwrap_or(false) {
+        return;
+    }
+    let height = (content_height + PREVIEW_CHROME).clamp(PREVIEW_MIN_HEIGHT, PREVIEW_MAX_HEIGHT);
+    preview_place(app, height);
+}
+
+pub fn preview_id() -> Option<i64> {
+    match PREVIEW_ID.load(Ordering::SeqCst) {
+        id if id >= 0 => Some(id),
+        _ => None,
+    }
 }
 
 pub fn preview_hide(app: &AppHandle) {
-    PREVIEW_GEN.fetch_add(1, Ordering::SeqCst);
+    PREVIEW_ID.store(-1, Ordering::SeqCst);
     if let Some(win) = app.get_webview_window("preview") {
         let _ = win.hide();
     }

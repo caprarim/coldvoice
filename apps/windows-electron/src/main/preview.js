@@ -1,10 +1,11 @@
 'use strict';
 
-// The transcript preview card shown in the bottom-left corner once a dictation
-// finishes. It exists for apps ColdVoice cannot type into: the text is right
-// there with a Copy button, an Open button for the main window, and a close X.
-// Frameless, always-on-top and non-focusable like the pill and the alert, so
-// its clicks come from the global mouse poller, not from DOM handlers.
+// The transcript card shown in the bottom-left corner once a dictation
+// finishes. It exists for apps ColdVoice cannot type into: the full text is
+// right there with Copy, Edit, Open and close, and a draining bar showing how
+// long it has left. Frameless, always-on-top and normally non-focusable like
+// the pill, so its clicks come from the global mouse poller — except in edit
+// mode, where the window is made focusable so the user can actually type.
 
 const path = require('path');
 const { BrowserWindow, screen } = require('electron');
@@ -12,32 +13,43 @@ const { log } = require('./log');
 
 let win = null;
 let loaded = false;
-let lastPayload = null;
-let hideTimer = null;
+let current = null;
+let editing = false;
+let tickTimer = null;
+let remaining = 0;
+let lastTick = 0;
 let topTimer = null;
 
-const WIDTH = 340;
-const HEIGHT = 152;
+const WIDTH = 380;
+const MIN_HEIGHT = 132;
+const MAX_HEIGHT = 420;
+// Everything above and below the text block: 14px top inset + 70px of meta,
+// button row and progress bar. Kept in step with preview.css.
+const CHROME_HEIGHT = 84;
 const MARGIN = 18;
-const DEFAULT_TIMEOUT = 14000;
+const DISMISS_MS = 5000;
+const TICK_MS = 100;
 
-// Click zones in unscaled CSS pixels, mirroring the absolute layout in
-// preview.css. Main hit-tests the press position against these instead.
+// Click zones in CSS pixels. X is measured from the left edge, Y from the
+// BOTTOM edge, because the card grows to fit the transcript.
 const BUTTONS = [
-  { id: 'close', x0: 298, x1: 334, y0: 6, y1: 38 },
-  { id: 'copy', x0: 14, x1: 96, y0: 114, y1: 144 },
-  { id: 'open', x0: 100, x1: 222, y0: 114, y1: 144 },
+  { id: 'copy', x0: 14, x1: 98 },
+  { id: 'edit', x0: 102, x1: 174 },
+  { id: 'open', x0: 178, x1: 304 },
+  { id: 'close', x0: 330, x1: 366 },
 ];
+const ROW_TOP_FROM_BOTTOM = 46;
+const ROW_BOTTOM_FROM_BOTTOM = 12;
 
 function ensure() {
   if (win && !win.isDestroyed()) return win;
   loaded = false;
   win = new BrowserWindow({
     width: WIDTH,
-    height: HEIGHT,
+    height: MIN_HEIGHT,
     frame: false,
     transparent: false,
-    backgroundColor: '#09090b',
+    backgroundColor: '#101116',
     hasShadow: true,
     resizable: false,
     alwaysOnTop: true,
@@ -57,7 +69,7 @@ function ensure() {
   w.webContents.on('did-finish-load', () => {
     if (win !== w) return;
     loaded = true;
-    if (lastPayload) w.webContents.send('preview:show', lastPayload);
+    if (current) w.webContents.send('preview:show', current);
   });
   w.webContents.on('render-process-gone', (_e, details) => {
     log(`preview: renderer gone (${details && details.reason})`);
@@ -72,24 +84,58 @@ function ensure() {
   return win;
 }
 
-function position() {
+// Always anchored to the bottom-left corner, so growing the card pushes its
+// top edge up instead of walking it off the screen.
+function place(height) {
   const wa = screen.getPrimaryDisplay().workArea;
   win.setBounds({
     x: wa.x + MARGIN,
-    y: wa.y + wa.height - HEIGHT - MARGIN,
+    y: wa.y + wa.height - height - MARGIN,
     width: WIDTH,
-    height: HEIGHT,
+    height,
   });
 }
 
-function show({ text = '', timeoutMs = DEFAULT_TIMEOUT } = {}) {
+// The renderer measures the laid-out transcript and asks for the height that
+// shows all of it; anything past MAX_HEIGHT scrolls inside the card.
+function resize(contentHeight) {
+  if (!isVisible()) return;
+  const h = Math.max(MIN_HEIGHT, Math.min(MAX_HEIGHT, Math.round(contentHeight) + CHROME_HEIGHT));
+  if (h === win.getBounds().height) return;
+  place(h);
+}
+
+function stopCountdown() {
+  if (tickTimer) { clearInterval(tickTimer); tickTimer = null; }
+}
+
+// Drains the bar in real time. Hovering the card holds it, so the buttons stay
+// reachable instead of vanishing mid-click.
+function startCountdown() {
+  stopCountdown();
+  remaining = DISMISS_MS;
+  lastTick = Date.now();
+  send('preview:tick', { remaining, total: DISMISS_MS });
+  tickTimer = setInterval(() => {
+    if (!isVisible()) { stopCountdown(); return; }
+    const now = Date.now();
+    const delta = now - lastTick;
+    lastTick = now;
+    if (editing || hitTest()) return;
+    remaining = Math.max(0, remaining - delta);
+    send('preview:tick', { remaining, total: DISMISS_MS });
+    if (remaining === 0) hide();
+  }, TICK_MS);
+}
+
+function show({ text = '', id = null } = {}) {
   const body = String(text || '').trim();
   if (!body) return;
   const w = ensure();
-  lastPayload = { text: body, words: body.split(/\s+/).filter(Boolean).length };
-  if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
-  position();
-  if (loaded) w.webContents.send('preview:show', lastPayload);
+  editing = false;
+  current = { text: body, id, words: body.split(/\s+/).filter(Boolean).length };
+  place(MIN_HEIGHT);
+  if (loaded) w.webContents.send('preview:show', current);
   w.showInactive();
   w.setAlwaysOnTop(true, 'screen-saver');
   w.moveTop();
@@ -104,16 +150,24 @@ function show({ text = '', timeoutMs = DEFAULT_TIMEOUT } = {}) {
     win.setAlwaysOnTop(true, 'screen-saver');
     win.moveTop();
   }, 200);
-  hideTimer = setTimeout(hide, timeoutMs);
-  log(`preview: shown (${lastPayload.words} words)`);
+  startCountdown();
+  log(`preview: shown (${current.words} words)`);
 }
 
 function isVisible() {
   return !!(win && !win.isDestroyed() && win.isVisible());
 }
 
+function isEditing() {
+  return editing && isVisible();
+}
+
 function currentText() {
-  return lastPayload ? lastPayload.text : '';
+  return current ? current.text : '';
+}
+
+function currentId() {
+  return current ? current.id : null;
 }
 
 // True when the cursor is anywhere over the card, buttons included.
@@ -130,27 +184,76 @@ function buttonAtCursor() {
   const b = win.getBounds();
   const c = screen.getCursorScreenPoint();
   if (c.x < b.x || c.x >= b.x + b.width || c.y < b.y || c.y >= b.y + b.height) return null;
-  const cssX = ((c.x - b.x) / b.width) * WIDTH;
-  const cssY = ((c.y - b.y) / b.height) * HEIGHT;
+  const cssX = c.x - b.x;
+  const fromBottom = b.y + b.height - c.y;
+  if (fromBottom > ROW_TOP_FROM_BOTTOM || fromBottom < ROW_BOTTOM_FROM_BOTTOM) return null;
   for (const btn of BUTTONS) {
-    if (cssX >= btn.x0 && cssX < btn.x1 && cssY >= btn.y0 && cssY < btn.y1) return btn.id;
+    if (cssX >= btn.x0 && cssX < btn.x1) return btn.id;
   }
   return null;
 }
 
-// Flash the Copy button's confirmation and keep the card up a little longer.
+// Editing needs real keyboard focus, which a focusable:false window never
+// gets. Flip it for the duration of the edit and flip it straight back, so the
+// card goes back to never stealing focus from the field being dictated into.
+function beginEdit() {
+  if (!isVisible() || editing) return;
+  editing = true;
+  stopCountdown();
+  try {
+    win.setFocusable(true);
+    win.show();
+    win.focus();
+  } catch (e) {
+    log('preview: focus for edit failed:', e && e.message);
+  }
+  send('preview:mode', { mode: 'edit' });
+}
+
+function endEdit() {
+  if (!editing) return;
+  editing = false;
+  try {
+    win.blur();
+    win.setFocusable(false);
+  } catch { /* ignore */ }
+  send('preview:mode', { mode: 'view' });
+  if (isVisible()) startCountdown();
+}
+
+// Accept edited text from the renderer, so Copy and the paste shortcut hand
+// back what the user actually meant to say.
+function applyEdit(text) {
+  const body = String(text || '').trim();
+  if (!body || !current) return null;
+  current = { ...current, text: body, words: body.split(/\s+/).filter(Boolean).length };
+  send('preview:show', current);
+  return current;
+}
+
+// Flash the Copy button's confirmation and let the bar keep draining.
 function copied() {
   if (!isVisible()) return;
-  if (loaded) win.webContents.send('preview:copied');
-  if (hideTimer) clearTimeout(hideTimer);
-  hideTimer = setTimeout(hide, 3000);
+  send('preview:copied');
+}
+
+function send(channel, payload) {
+  if (!win || win.isDestroyed() || !loaded) return;
+  win.webContents.send(channel, payload);
 }
 
 function hide() {
-  lastPayload = null;
-  if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+  stopCountdown();
+  if (editing) {
+    editing = false;
+    try { win.blur(); win.setFocusable(false); } catch { /* ignore */ }
+  }
+  current = null;
   if (topTimer) { clearInterval(topTimer); topTimer = null; }
   if (win && !win.isDestroyed()) win.hide();
 }
 
-module.exports = { show, hide, ensure, isVisible, hitTest, buttonAtCursor, copied, currentText };
+module.exports = {
+  show, hide, ensure, isVisible, isEditing, hitTest, buttonAtCursor,
+  copied, currentText, currentId, resize, beginEdit, endEdit, applyEdit,
+};

@@ -883,11 +883,11 @@ async function handleDone(data) {
 
   try {
     lastTranscript = final;
-    db.saveTranscript(raw, final, lastTarget.appId, durationMs);
+    const transcriptId = db.saveTranscript(raw, final, lastTarget.appId, durationMs);
     notifyTranscript();
     // Bottom-left card with the finished text, for apps ColdVoice cannot type
-    // into: copy it from there, or open the main window.
-    preview.show({ text: final });
+    // into: copy it from there, fix it, or open the main window.
+    preview.show({ text: final, id: transcriptId });
 
     if (final) {
       // When "insert on release" is off, just copy — never auto-paste.
@@ -974,6 +974,9 @@ function registerIpc() {
     stopDictation();
   });
   ipcMain.on('alert:dismiss', () => { log('alert: dismissed'); alert.hide(); });
+  ipcMain.on('preview:resize', (_e, data) => preview.resize((data && data.height) || 0));
+  ipcMain.on('preview:save', (_e, data) => savePreviewEdit(data && data.text));
+  ipcMain.on('preview:cancelEdit', () => preview.endEdit());
 
   ipcMain.handle('db:getSettings', () => db.allSettings());
   ipcMain.handle('db:setSetting', (_e, { key, value }) => {
@@ -1145,12 +1148,28 @@ function onPreviewButton(id) {
     const text = preview.currentText();
     if (text) clipboard.writeText(text);
     preview.copied();
+  } else if (id === 'edit') {
+    preview.beginEdit();
   } else if (id === 'open') {
     preview.hide();
     showMain();
   } else if (id === 'close') {
     preview.hide();
   }
+}
+
+// Text corrected in the preview replaces the saved row and becomes what the
+// paste shortcut hands out, so a fixed transcript is fixed everywhere.
+function savePreviewEdit(text) {
+  const updated = preview.applyEdit(text);
+  if (!updated) return;
+  lastTranscript = updated.text;
+  if (updated.id != null) {
+    db.updateTranscript(updated.id, updated.text);
+    notifyTranscript();
+  }
+  preview.endEdit();
+  log('preview: edit saved');
 }
 
 function startMousePasteHook() {
@@ -1166,7 +1185,8 @@ function startMousePasteHook() {
       if (clicked) onPillButton(clicked);
       return;
     }
-    if (button === 'L' && preview.hitTest()) {
+    // While editing, the card is focusable and its own DOM handlers run.
+    if (button === 'L' && !preview.isEditing() && preview.hitTest()) {
       onPreviewButton(preview.buttonAtCursor());
       return;
     }

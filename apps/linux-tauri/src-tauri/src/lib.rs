@@ -652,7 +652,7 @@ async fn run_session(
     }
 
     *state.last_transcript.lock().unwrap() = final_text.clone();
-    {
+    let transcript_id = {
         let conn = state.conn.lock().unwrap();
         db::save_transcript(
             &conn,
@@ -660,12 +660,12 @@ async fn run_session(
             &final_text,
             if app_id.is_empty() { None } else { Some(app_id.as_str()) },
             duration_ms,
-        );
-    }
+        )
+    };
     let _ = app.emit("transcript:new", json!({}));
     // Bottom-left card with the finished text, for apps ColdVoice cannot type
-    // into: copy it from there, or open the main window.
-    overlays::preview_show(&app, &final_text, 14000);
+    // into: copy it from there, fix it, or open the main window.
+    overlays::preview_show(&app, &final_text, transcript_id);
 
     // When "insert on release" is off, just copy — never auto-paste.
     if state.setting("dictation.insertOnRelease", "1") != "1" {
@@ -1235,12 +1235,28 @@ fn alert_dismiss(app: AppHandle) -> bool {
 
 #[tauri::command]
 fn preview_action(app: AppHandle, state: State<'_, AppState>, action: String, text: Option<String>) -> bool {
-    logf!("preview: {} clicked", action);
+    logf!("preview: {}", action);
     match action.as_str() {
         "copy" => {
             let body = text.unwrap_or_default();
             if !body.trim().is_empty() {
                 state.clip_write(&body);
+            }
+        }
+        // Text corrected in the card replaces the saved row and becomes what
+        // the paste shortcut hands out, so a fixed transcript is fixed
+        // everywhere.
+        "save" => {
+            let body = text.unwrap_or_default().trim().to_string();
+            if body.is_empty() {
+                return true;
+            }
+            *state.last_transcript.lock().unwrap() = body.clone();
+            if let Some(id) = overlays::preview_id() {
+                let conn = state.conn.lock().unwrap();
+                db::update_transcript(&conn, id, &body);
+                drop(conn);
+                let _ = app.emit("transcript:new", json!({}));
             }
         }
         "open" => {
@@ -1250,6 +1266,12 @@ fn preview_action(app: AppHandle, state: State<'_, AppState>, action: String, te
         "close" => overlays::preview_hide(&app),
         _ => {}
     }
+    true
+}
+
+#[tauri::command]
+fn preview_resize(app: AppHandle, height: f64) -> bool {
+    overlays::preview_resize(&app, height);
     true
 }
 
@@ -1443,6 +1465,7 @@ pub fn run() {
             pill_save_position,
             alert_dismiss,
             preview_action,
+            preview_resize,
             pipeline_result,
             update_check,
             update_download,

@@ -1,128 +1,117 @@
 :root {
-  --background: 240 10% 3.9%;
-  --foreground: 0 0% 98%;
-  --muted-foreground: 240 5% 64.9%;
-  --border: 240 3.7% 15.9%;
-  --accent-rgb: 34 197 94;
+  --surface: #101116;
+  --surface-2: #1b1d25;
+  --border: #2a2d38;
+  --fg: #e9ebf2;
+  --muted: #868c9e;
+  --accent: #22d3ee;
+  --accent-deep: #0e7490;
 }
 
 html, body {
   margin: 0;
   height: 100%;
   overflow: hidden;
-  background: hsl(var(--background));
+  background: var(--surface);
   font-family: "Segoe UI", ui-sans-serif, system-ui, sans-serif;
   -webkit-user-select: none;
   user-select: none;
 }
 
-/* Every child is absolutely positioned: main hit-tests clicks against these
-   exact pixel boxes, so the layout may not reflow. */
+/* The button row is hit-tested from the main process against fixed pixel
+   boxes measured from the card's bottom-left corner, so its geometry may not
+   change without updating BUTTONS in main/preview.js. */
 .card {
   position: relative;
   box-sizing: border-box;
   height: 100%;
-  background: hsl(var(--background));
-  border: 1px solid hsl(var(--border));
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 12px;
-  box-shadow: 0 12px 34px -8px rgba(0, 0, 0, 0.75);
+  box-shadow: 0 14px 38px -10px rgba(0, 0, 0, 0.8);
   overflow: hidden;
-  animation: enter 180ms cubic-bezier(0.16, 1, 0.3, 1);
+  animation: enter 160ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 @keyframes enter {
-  from { opacity: 0; transform: translateY(12px) scale(0.98); }
+  from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: none; }
 }
 
-.card::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: radial-gradient(110% 130% at 0% 0%, rgba(var(--accent-rgb), 0.13), transparent 55%);
-}
-
-.head {
+.text {
   position: absolute;
   left: 16px;
-  top: 12px;
-  display: flex;
-  align-items: center;
-  gap: 7px;
+  right: 16px;
+  top: 14px;
+  bottom: 70px;
+  overflow-y: auto;
+  font-size: 13.5px;
+  line-height: 19px;
+  color: var(--fg);
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
 }
 
-.head .dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: rgb(var(--accent-rgb));
-}
+.text::-webkit-scrollbar { width: 6px; }
+.text::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 
-.head .brand {
-  font-size: 11.5px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: rgb(var(--accent-rgb));
-}
-
-.close {
+.editor {
   position: absolute;
-  left: 302px;
-  top: 10px;
-  width: 28px;
+  left: 16px;
+  right: 16px;
+  top: 14px;
+  bottom: 52px;
+  display: none;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  resize: none;
+  border: 1px solid var(--accent-deep);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--fg);
+  font-family: inherit;
+  font-size: 13.5px;
+  line-height: 19px;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.editor:focus { outline: none; border-color: var(--accent); }
+
+.meta {
+  position: absolute;
+  left: 16px;
+  bottom: 49px;
+  height: 14px;
+  font-size: 11px;
+  line-height: 14px;
+  color: var(--muted);
+}
+
+.row {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 15px;
+  height: 28px;
+}
+
+.edit-row { display: none; }
+
+.btn {
+  position: absolute;
+  top: 0;
   height: 28px;
   padding: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  background: transparent;
-  color: hsl(var(--muted-foreground));
-  cursor: pointer;
-}
-
-.close svg { width: 15px; height: 15px; }
-
-.text {
-  position: absolute;
-  left: 16px;
-  top: 44px;
-  width: 308px;
-  height: 54px;
-  font-size: 13px;
-  line-height: 18px;
-  color: hsl(var(--foreground));
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-}
-
-.meta {
-  position: absolute;
-  left: 16px;
-  top: 100px;
-  font-size: 11px;
-  line-height: 14px;
-  color: hsl(var(--muted-foreground));
-}
-
-.btn {
-  position: absolute;
-  top: 116px;
-  height: 26px;
-  padding: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   gap: 6px;
-  border: 1px solid hsl(var(--border));
+  box-sizing: border-box;
+  border: 1px solid var(--border);
   border-radius: 8px;
-  background: #17181d;
-  color: hsl(var(--foreground));
+  background: var(--surface-2);
+  color: var(--fg);
   font-family: inherit;
   font-size: 12px;
   font-weight: 550;
@@ -130,7 +119,38 @@ html, body {
 }
 
 .btn svg { width: 14px; height: 14px; }
+.btn.accent { border-color: transparent; background: var(--accent-deep); color: #f2fdff; }
+.btn.icon { color: var(--muted); }
 
-#copy { left: 16px; width: 78px; border-color: rgba(var(--accent-rgb), 0.45); }
-#copy.done { background: rgba(var(--accent-rgb), 0.16); color: rgb(var(--accent-rgb)); }
-#open { left: 102px; width: 118px; }
+#copy { left: 16px; width: 80px; }
+#copy.done { background: #15803d; color: #f0fdf4; }
+#edit { left: 104px; width: 68px; }
+#open { left: 180px; width: 122px; }
+#close { left: 332px; width: 32px; }
+#save { left: 16px; width: 84px; }
+#cancel { left: 108px; width: 78px; }
+
+.bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: #23252e;
+}
+
+.fill {
+  height: 100%;
+  width: 100%;
+  background: var(--accent);
+  opacity: 0.75;
+  transition: width 100ms linear;
+}
+
+.card[data-mode="edit"] .text,
+.card[data-mode="edit"] .meta,
+.card[data-mode="edit"] .row,
+.card[data-mode="edit"] .bar { display: none; }
+
+.card[data-mode="edit"] .editor { display: block; }
+.card[data-mode="edit"] .edit-row { display: block; }

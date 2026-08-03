@@ -67,8 +67,8 @@
       {
         "label": "preview",
         "url": "preview.html",
-        "width": 340,
-        "height": 152,
+        "width": 380,
+        "height": 132,
         "decorations": false,
         "transparent": true,
         "alwaysOnTop": true,

@@ -113,11 +113,12 @@ function wordCount(text) {
 }
 
 function saveTranscript(raw, final, targetApp, durationMs = 0) {
-  if (getSetting('privacy.storeTranscripts', '1') !== '1') return;
-  get().run(
+  if (getSetting('privacy.storeTranscripts', '1') !== '1') return null;
+  const info = get().run(
     'INSERT INTO transcripts (raw_text, final_text, target_app, word_count, duration_ms) VALUES (?, ?, ?, ?, ?)',
     [raw, final, targetApp || null, wordCount(final), Math.round(durationMs) || 0]
   );
+  return info ? info.lastInsertRowid : null;
 }
 
 function listTranscripts(limit = 200) {

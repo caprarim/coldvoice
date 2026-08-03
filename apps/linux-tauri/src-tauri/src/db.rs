@@ -203,14 +203,16 @@ pub fn delete_snippet(conn: &Connection, id: i64) {
 }
 
 // transcripts ---------------------------------------------------------------
-pub fn save_transcript(conn: &Connection, raw: &str, final_text: &str, target_app: Option<&str>, duration_ms: i64) {
+pub fn save_transcript(conn: &Connection, raw: &str, final_text: &str, target_app: Option<&str>, duration_ms: i64) -> Option<i64> {
     if get_setting(conn, "privacy.storeTranscripts", "1") != "1" {
-        return;
+        return None;
     }
-    let _ = conn.execute(
+    conn.execute(
         "INSERT INTO transcripts (raw_text, final_text, target_app, word_count, duration_ms) VALUES (?, ?, ?, ?, ?)",
         params![raw, final_text, target_app, util::word_count(final_text), duration_ms.max(0)],
-    );
+    )
+    .ok()
+    .map(|_| conn.last_insert_rowid())
 }
 
 pub fn list_transcripts(conn: &Connection, limit: i64) -> Value {

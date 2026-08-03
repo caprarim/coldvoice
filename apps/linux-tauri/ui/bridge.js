@@ -41,6 +41,7 @@ const INVOKE = {
   'pill:savePosition': ['pill_save_position'],
   'alert:dismiss': ['alert_dismiss'],
   'preview:action': ['preview_action', (d) => ({ action: d.action, text: d.text || '' })],
+  'preview:resize': ['preview_resize', (d) => ({ height: d.height || 0 })],
   'pipeline:result': ['pipeline_result', (d) => ({ id: d.id, result: d.result })],
   'update:check': ['update_check'],
   'update:download': ['update_download'],

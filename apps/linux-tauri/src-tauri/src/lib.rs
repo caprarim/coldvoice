@@ -235,7 +235,8 @@ fn run_action(app: &AppHandle, action: Action) {
         }
         Action::StopHold => {
             let (recording, mode) = {
-                let d = state_of(app).dictation.lock().unwrap();
+                let state = state_of(app);
+                let d = state.dictation.lock().unwrap();
                 (d.recording, d.mode.clone())
             };
             if recording && mode == "hold" {
@@ -249,7 +250,8 @@ fn run_action(app: &AppHandle, action: Action) {
         Action::Pill(name) => run_pill_action(app, &name),
     }
     let idle = {
-        let d = state_of(app).dictation.lock().unwrap();
+        let state = state_of(app);
+        let d = state.dictation.lock().unwrap();
         !d.recording && !d.no_mic_hold
     };
     if idle {

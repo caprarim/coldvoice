@@ -16,7 +16,7 @@ pub const PILL_HEIGHT: f64 = 22.0;
 const ALERT_WIDTH: f64 = 420.0;
 const ALERT_HEIGHT: f64 = 96.0;
 const NOTICE_WIDTH: f64 = 460.0;
-const NOTICE_HEIGHT: f64 = 92.0;
+const NOTICE_HEIGHT: f64 = 62.0;
 const NOTICE_TOP_MARGIN: f64 = 24.0;
 const PREVIEW_WIDTH: f64 = 360.0;
 const PREVIEW_MIN_HEIGHT: f64 = 168.0;
@@ -55,32 +55,51 @@ fn emit_to(app: &AppHandle, label: &str, event: &str, payload: Value) {
     let _ = app.emit_to(label, event, payload);
 }
 
+// GTK is not thread-safe and dictation is driven from the global-hotkey thread,
+// so every window mutation is marshalled onto the main thread. Reading the
+// monitor from there is also what keeps work_area() from blocking on a
+// cross-thread getter while the caller holds the dictation lock.
+fn on_main<F: FnOnce(&AppHandle) + Send + 'static>(app: &AppHandle, f: F) {
+    let app = app.clone();
+    let handle = app.clone();
+    let _ = handle.run_on_main_thread(move || f(&app));
+}
+
+fn hide_window(app: &AppHandle, label: &'static str) {
+    on_main(app, move |app| {
+        if let Some(win) = app.get_webview_window(label) {
+            let _ = win.hide();
+        }
+    });
+}
+
 // --- pill -------------------------------------------------------------------
 pub fn pill_show(app: &AppHandle, saved: Option<(f64, f64)>, scale: f64) {
-    let Some(win) = app.get_webview_window("pill") else { return };
-    let w = PILL_WIDTH * scale;
-    let h = PILL_HEIGHT * scale;
-    let _ = win.set_size(LogicalSize::new(w, h));
-    // Zoom the contents with the frame so the pill scales as one piece.
-    let _ = win.set_zoom(scale);
-    let (ax, ay, aw, ah) = work_area(app);
-    let (x, y) = match saved {
-        Some((sx, sy)) => (
-            sx.max(ax).min(ax + aw - w),
-            sy.max(ay).min(ay + ah - h),
-        ),
-        // Bottom-centre by default, the same resting spot as on Windows.
-        None => (ax + aw / 2.0 - w / 2.0, ay + ah - h - 14.0),
-    };
-    let _ = win.set_position(LogicalPosition::new(x, y));
-    let _ = win.set_always_on_top(true);
-    let _ = win.show();
+    on_main(app, move |app| {
+        let Some(win) = app.get_webview_window("pill") else { return };
+        let w = PILL_WIDTH * scale;
+        let h = PILL_HEIGHT * scale;
+        let _ = win.set_size(LogicalSize::new(w, h));
+        // The contents scale in CSS inside the pill. Zooming the webview from
+        // Rust instead used to take the whole app down mid-dictation.
+        emit_to(app, "pill", "pill:scale", json!({ "scale": scale }));
+        let (ax, ay, aw, ah) = work_area(app);
+        let (x, y) = match saved {
+            Some((sx, sy)) => (
+                sx.max(ax).min(ax + aw - w),
+                sy.max(ay).min(ay + ah - h),
+            ),
+            // Bottom-centre by default, the same resting spot as on Windows.
+            None => (ax + aw / 2.0 - w / 2.0, ay + ah - h - 14.0),
+        };
+        let _ = win.set_position(LogicalPosition::new(x, y));
+        let _ = win.set_always_on_top(true);
+        let _ = win.show();
+    });
 }
 
 pub fn pill_hide(app: &AppHandle) {
-    if let Some(win) = app.get_webview_window("pill") {
-        let _ = win.hide();
-    }
+    hide_window(app, "pill");
 }
 
 pub fn pill_state(app: &AppHandle, state: &str, message: Option<&str>) {
@@ -101,22 +120,20 @@ pub fn pill_position(app: &AppHandle) -> Option<(f64, f64)> {
 
 // --- notice (start / stop banner) -------------------------------------------
 pub fn notice_show(app: &AppHandle, kind: &str, title: &str, message: &str, timeout_ms: u64) {
-    let Some(win) = app.get_webview_window("notice") else { return };
-    let (ax, ay, aw, _ah) = work_area(app);
-    let _ = win.set_size(LogicalSize::new(NOTICE_WIDTH, NOTICE_HEIGHT));
-    let _ = win.set_position(LogicalPosition::new(
-        ax + aw / 2.0 - NOTICE_WIDTH / 2.0,
-        ay + NOTICE_TOP_MARGIN,
-    ));
-    let _ = win.set_always_on_top(true);
-    emit_to(
-        app,
-        "notice",
-        "notice:show",
-        json!({ "kind": kind, "title": title, "message": message }),
-    );
-    let _ = win.show();
-    NOTICE_VISIBLE.store(true, Ordering::SeqCst);
+    let payload = json!({ "kind": kind, "title": title, "message": message });
+    on_main(app, move |app| {
+        let Some(win) = app.get_webview_window("notice") else { return };
+        let (ax, ay, aw, _ah) = work_area(app);
+        let _ = win.set_size(LogicalSize::new(NOTICE_WIDTH, NOTICE_HEIGHT));
+        let _ = win.set_position(LogicalPosition::new(
+            ax + aw / 2.0 - NOTICE_WIDTH / 2.0,
+            ay + NOTICE_TOP_MARGIN,
+        ));
+        let _ = win.set_always_on_top(true);
+        emit_to(app, "notice", "notice:show", payload);
+        let _ = win.show();
+        NOTICE_VISIBLE.store(true, Ordering::SeqCst);
+    });
 
     let gen = NOTICE_GEN.fetch_add(1, Ordering::SeqCst) + 1;
     let app = app.clone();
@@ -126,9 +143,7 @@ pub fn notice_show(app: &AppHandle, kind: &str, title: &str, message: &str, time
             return;
         }
         NOTICE_VISIBLE.store(false, Ordering::SeqCst);
-        if let Some(win) = app.get_webview_window("notice") {
-            let _ = win.hide();
-        }
+        hide_window(&app, "notice");
     });
 }
 
@@ -148,32 +163,36 @@ fn preview_place(app: &AppHandle, height: f64) {
 }
 
 pub fn preview_show(app: &AppHandle, text: &str, id: Option<i64>) {
-    let body = text.trim();
+    let body = text.trim().to_string();
     if body.is_empty() {
         return;
     }
-    let Some(win) = app.get_webview_window("preview") else { return };
     PREVIEW_ID.store(id.unwrap_or(-1), Ordering::SeqCst);
-    preview_place(app, PREVIEW_MIN_HEIGHT);
-    let _ = win.set_always_on_top(true);
-    emit_to(
-        app,
-        "preview",
-        "preview:show",
-        json!({ "text": body, "words": body.split_whitespace().count() }),
-    );
-    let _ = win.show();
+    on_main(app, move |app| {
+        let Some(win) = app.get_webview_window("preview") else { return };
+        preview_place(app, PREVIEW_MIN_HEIGHT);
+        let _ = win.set_always_on_top(true);
+        emit_to(
+            app,
+            "preview",
+            "preview:show",
+            json!({ "text": body, "words": body.split_whitespace().count() }),
+        );
+        let _ = win.show();
+    });
 }
 
 // The card measures its laid-out transcript and asks for a height that shows
 // all of it; anything past the maximum scrolls inside the card.
 pub fn preview_resize(app: &AppHandle, content_height: f64) {
-    let Some(win) = app.get_webview_window("preview") else { return };
-    if !win.is_visible().unwrap_or(false) {
-        return;
-    }
-    let height = (content_height + PREVIEW_CHROME).clamp(PREVIEW_MIN_HEIGHT, PREVIEW_MAX_HEIGHT);
-    preview_place(app, height);
+    on_main(app, move |app| {
+        let Some(win) = app.get_webview_window("preview") else { return };
+        if !win.is_visible().unwrap_or(false) {
+            return;
+        }
+        let height = (content_height + PREVIEW_CHROME).clamp(PREVIEW_MIN_HEIGHT, PREVIEW_MAX_HEIGHT);
+        preview_place(app, height);
+    });
 }
 
 pub fn preview_id() -> Option<i64> {
@@ -185,31 +204,27 @@ pub fn preview_id() -> Option<i64> {
 
 pub fn preview_hide(app: &AppHandle) {
     PREVIEW_ID.store(-1, Ordering::SeqCst);
-    if let Some(win) = app.get_webview_window("preview") {
-        let _ = win.hide();
-    }
+    hide_window(app, "preview");
 }
 
 // --- alert (mic problems) ----------------------------------------------------
 pub fn alert_show(app: &AppHandle, kind: &str, title: &str, message: &str, sticky: bool, timeout_ms: u64) {
-    let Some(win) = app.get_webview_window("alert") else { return };
-    let (ax, ay, aw, _ah) = work_area(app);
-    // Stack under the start/stop banner when both are up.
-    let top = if NOTICE_VISIBLE.load(Ordering::SeqCst) {
-        ay + NOTICE_TOP_MARGIN + NOTICE_HEIGHT + 10.0
-    } else {
-        ay + 18.0
-    };
-    let _ = win.set_size(LogicalSize::new(ALERT_WIDTH, ALERT_HEIGHT));
-    let _ = win.set_position(LogicalPosition::new(ax + aw / 2.0 - ALERT_WIDTH / 2.0, top));
-    let _ = win.set_always_on_top(true);
-    emit_to(
-        app,
-        "alert",
-        "alert:show",
-        json!({ "kind": kind, "title": title, "message": message }),
-    );
-    let _ = win.show();
+    let payload = json!({ "kind": kind, "title": title, "message": message });
+    on_main(app, move |app| {
+        let Some(win) = app.get_webview_window("alert") else { return };
+        let (ax, ay, aw, _ah) = work_area(app);
+        // Stack under the start/stop banner when both are up.
+        let top = if NOTICE_VISIBLE.load(Ordering::SeqCst) {
+            ay + NOTICE_TOP_MARGIN + NOTICE_HEIGHT + 10.0
+        } else {
+            ay + 18.0
+        };
+        let _ = win.set_size(LogicalSize::new(ALERT_WIDTH, ALERT_HEIGHT));
+        let _ = win.set_position(LogicalPosition::new(ax + aw / 2.0 - ALERT_WIDTH / 2.0, top));
+        let _ = win.set_always_on_top(true);
+        emit_to(app, "alert", "alert:show", payload);
+        let _ = win.show();
+    });
 
     let gen = ALERT_GEN.fetch_add(1, Ordering::SeqCst) + 1;
     if sticky {
@@ -221,15 +236,11 @@ pub fn alert_show(app: &AppHandle, kind: &str, title: &str, message: &str, stick
         if ALERT_GEN.load(Ordering::SeqCst) != gen {
             return;
         }
-        if let Some(win) = app.get_webview_window("alert") {
-            let _ = win.hide();
-        }
+        hide_window(&app, "alert");
     });
 }
 
 pub fn alert_hide(app: &AppHandle) {
     ALERT_GEN.fetch_add(1, Ordering::SeqCst);
-    if let Some(win) = app.get_webview_window("alert") {
-        let _ = win.hide();
-    }
+    hide_window(app, "alert");
 }

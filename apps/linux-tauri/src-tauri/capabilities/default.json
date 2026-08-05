@@ -2,7 +2,7 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "ColdVoice desktop capabilities.",
-  "windows": ["main", "pill", "alert", "notice", "processor"],
+  "windows": ["main", "pill", "alert", "notice", "preview", "processor"],
   "permissions": [
     "core:default",
     "core:window:allow-start-dragging",

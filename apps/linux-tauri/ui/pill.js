@@ -54,15 +54,20 @@ for (const id of ['cancel', 'pause', 'confirm']) {
 
 // Drag the pill anywhere, resize it from a corner, and remember both.
 const appWindow = cv.window && cv.window.getCurrentWindow ? cv.window.getCurrentWindow() : null;
-const CORNER = 8;
+// Grips track the pill's size the way the Windows build does, so a bigger pill
+// still leaves most of its body as drag surface instead of resize edges.
+function gripX() { return Math.max(6, Math.round(window.innerWidth * 0.1)); }
+function gripY() { return Math.min(gripX(), Math.max(4, Math.round(window.innerHeight * 0.3))); }
 
 function cornerAt(e) {
   const dirs = cv.window && cv.window.ResizeDirection;
   if (!dirs) return null;
-  const left = e.clientX <= CORNER;
-  const right = window.innerWidth - e.clientX <= CORNER;
-  const top = e.clientY <= CORNER;
-  const bottom = window.innerHeight - e.clientY <= CORNER;
+  const gx = gripX();
+  const gy = gripY();
+  const left = e.clientX <= gx;
+  const right = window.innerWidth - e.clientX <= gx;
+  const top = e.clientY <= gy;
+  const bottom = window.innerHeight - e.clientY <= gy;
   if (!(left || right) || !(top || bottom)) return null;
   if (top && left) return dirs.NorthWest;
   if (top && right) return dirs.NorthEast;
@@ -70,13 +75,45 @@ function cornerAt(e) {
   return dirs.SouthEast;
 }
 
+// Some window managers ignore the _NET_WM_MOVERESIZE request behind
+// startDragging, which left the pill stuck in place. When that happens the
+// pointer is tracked here and the window is moved directly instead.
+let manual = null;
+
+function manualBegin(e) {
+  if (!appWindow || !appWindow.outerPosition || !appWindow.setPosition) return;
+  Promise.all([appWindow.outerPosition(), appWindow.scaleFactor()])
+    .then(([pos, scale]) => {
+      manual = {
+        screenX: e.screenX,
+        screenY: e.screenY,
+        x: pos.x / scale,
+        y: pos.y / scale,
+      };
+    })
+    .catch(() => { manual = null; });
+}
+
+window.addEventListener('mousemove', (e) => {
+  if (!manual) return;
+  const x = manual.x + (e.screenX - manual.screenX);
+  const y = manual.y + (e.screenY - manual.screenY);
+  const Logical = cv.dpi && cv.dpi.LogicalPosition;
+  const next = Logical ? new Logical(x, y) : { type: 'Logical', x, y };
+  appWindow.setPosition(next).catch(() => {});
+});
+
+window.addEventListener('mouseup', () => { manual = null; });
+
 pill.addEventListener('mousedown', async (e) => {
   if (e.button !== 0 || !appWindow) return;
+  const dir = cornerAt(e);
   try {
-    const dir = cornerAt(e);
     if (dir != null && appWindow.startResizeDragging) await appWindow.startResizeDragging(dir);
     else await appWindow.startDragging();
-  } catch { /* ignore */ }
+  } catch {
+    if (dir == null) manualBegin(e);
+  }
 });
 
 // startDragging / startResizeDragging hand the pointer to the window manager, so
@@ -86,6 +123,11 @@ window.addEventListener('mouseup', () => {
     const scale = window.innerWidth ? window.innerWidth / 138 : 1;
     cv.invoke('pill:savePosition', { scale }).catch(() => {});
   }, 120);
+});
+
+cv.on('pill:scale', (data) => {
+  const s = data && typeof data.scale === 'number' && data.scale > 0 ? data.scale : 1;
+  document.documentElement.style.zoom = String(s);
 });
 
 cv.on('pill:level', (data) => {

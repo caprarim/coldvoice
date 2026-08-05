@@ -29,6 +29,7 @@ mod pipeline;
 mod updater;
 
 use audio::AudioEvent;
+use once_cell::sync::OnceCell;
 use rusqlite::Connection;
 use serde_json::{json, Value};
 use std::path::PathBuf;
@@ -160,7 +161,7 @@ fn cloud_ready(state: &AppState) -> bool {
 
 // --- dictation ---------------------------------------------------------------
 fn pill_scale(state: &AppState) -> f64 {
-    state.setting("pill.scale", "1").parse::<f64>().unwrap_or(1.0).clamp(0.6, 4.0)
+    state.setting("pill.scale", "1.9").parse::<f64>().unwrap_or(1.9).clamp(0.6, 4.0)
 }
 
 fn saved_pill_position(state: &AppState) -> Option<(f64, f64)> {
@@ -210,6 +211,73 @@ fn is_current(app: &AppHandle, gen: u64) -> bool {
     state_of(app).generation.load(Ordering::SeqCst) == gen
 }
 
+enum Action {
+    Toggle,
+    StartHold,
+    StopHold,
+    Cancel,
+    PauseResume,
+    PasteLast,
+    ShowMain,
+    Pill(String),
+}
+
+static ACTIONS: OnceCell<std::sync::mpsc::Sender<Action>> = OnceCell::new();
+
+fn run_action(app: &AppHandle, action: Action) {
+    match action {
+        Action::Toggle => toggle_dictation(app),
+        Action::StartHold => {
+            let recording = state_of(app).dictation.lock().unwrap().recording;
+            if !recording {
+                start_dictation(app, "hold");
+            }
+        }
+        Action::StopHold => {
+            let (recording, mode) = {
+                let d = state_of(app).dictation.lock().unwrap();
+                (d.recording, d.mode.clone())
+            };
+            if recording && mode == "hold" {
+                stop_dictation(app);
+            }
+        }
+        Action::Cancel => cancel_dictation(app),
+        Action::PauseResume => toggle_pause(app),
+        Action::PasteLast => paste_last_transcript(app),
+        Action::ShowMain => show_main(app),
+        Action::Pill(name) => run_pill_action(app, &name),
+    }
+    let idle = {
+        let d = state_of(app).dictation.lock().unwrap();
+        !d.recording && !d.no_mic_hold
+    };
+    if idle {
+        unregister_escape(app);
+    }
+}
+
+fn dispatch(app: &AppHandle, action: Action) {
+    match ACTIONS.get() {
+        Some(tx) => {
+            let _ = tx.send(action);
+        }
+        None => run_action(app, action),
+    }
+}
+
+fn start_action_worker(app: AppHandle) {
+    let (tx, rx) = std::sync::mpsc::channel::<Action>();
+    if ACTIONS.set(tx).is_err() {
+        return;
+    }
+    std::thread::spawn(move || {
+        while let Ok(action) = rx.recv() {
+            run_action(&app, action);
+        }
+    });
+}
+
 fn toggle_dictation(app: &AppHandle) {
     let state = state_of(app);
     let (recording, no_mic_hold) = {
@@ -229,6 +297,7 @@ fn toggle_dictation(app: &AppHandle) {
 
 fn dismiss_no_mic_hold(app: &AppHandle) {
     state_of(app).dictation.lock().unwrap().no_mic_hold = false;
+    unregister_escape(app);
     finish_pill(app, 0);
 }
 
@@ -342,6 +411,8 @@ fn stop_dictation(app: &AppHandle) {
     let state = state_of(app);
     let mut d = state.dictation.lock().unwrap();
     if !d.recording {
+        drop(d);
+        unregister_escape(app);
         return;
     }
     d.recording = false;
@@ -842,6 +913,7 @@ fn start_net_watch(app: AppHandle) {
 
 // --- shortcuts ---------------------------------------------------------------
 fn register_escape(app: &AppHandle) {
+    unregister_escape(app);
     if let Ok(shortcut) = "Escape".parse::<Shortcut>() {
         let _ = app.global_shortcut().register(shortcut.clone());
         state_of(app).shortcuts.lock().unwrap().push((shortcut, "cancel".into()));
@@ -850,16 +922,23 @@ fn register_escape(app: &AppHandle) {
 
 fn unregister_escape(app: &AppHandle) {
     let state = state_of(app);
-    let mut shortcuts = state.shortcuts.lock().unwrap();
-    let mut kept = Vec::new();
-    for (shortcut, id) in shortcuts.drain(..) {
-        if id == "cancel" {
-            let _ = app.global_shortcut().unregister(shortcut);
-        } else {
-            kept.push((shortcut, id));
+    let dropped: Vec<Shortcut> = {
+        let mut shortcuts = state.shortcuts.lock().unwrap();
+        let mut dropped = Vec::new();
+        let mut kept = Vec::new();
+        for (shortcut, id) in shortcuts.drain(..) {
+            if id == "cancel" {
+                dropped.push(shortcut);
+            } else {
+                kept.push((shortcut, id));
+            }
         }
+        *shortcuts = kept;
+        dropped
+    };
+    for shortcut in dropped {
+        let _ = app.global_shortcut().unregister(shortcut);
     }
-    *shortcuts = kept;
 }
 
 fn refresh_hotkeys(app: &AppHandle) {
@@ -918,28 +997,16 @@ fn on_shortcut(app: &AppHandle, shortcut: &Shortcut, state: ShortcutState) {
     let Some(id) = id else { return };
     match state {
         ShortcutState::Pressed => match id.as_str() {
-            "toggle" => toggle_dictation(app),
-            "hold" => {
-                let recording = state_of(app).dictation.lock().unwrap().recording;
-                if !recording {
-                    start_dictation(app, "hold");
-                }
-            }
-            "paste" => paste_last_transcript(app),
-            "pauseResume" => toggle_pause(app),
-            "cancel" => cancel_dictation(app),
+            "toggle" => dispatch(app, Action::Toggle),
+            "hold" => dispatch(app, Action::StartHold),
+            "paste" => dispatch(app, Action::PasteLast),
+            "pauseResume" => dispatch(app, Action::PauseResume),
+            "cancel" => dispatch(app, Action::Cancel),
             _ => {}
         },
         ShortcutState::Released => {
             if id == "hold" {
-                let app_state = state_of(app);
-                let (recording, mode) = {
-                    let d = app_state.dictation.lock().unwrap();
-                    (d.recording, d.mode.clone())
-                };
-                if recording && mode == "hold" {
-                    stop_dictation(app);
-                }
+                dispatch(app, Action::StopHold);
             }
         }
     }
@@ -1195,19 +1262,23 @@ fn mic_verify(device_id: String) -> Result<bool, String> {
     audio::verify_device(&device_id).map(|_| true)
 }
 
-#[tauri::command]
-fn pill_action(app: AppHandle, action: String) -> bool {
-    let no_mic_hold = state_of(&app).dictation.lock().unwrap().no_mic_hold;
+fn run_pill_action(app: &AppHandle, action: &str) {
+    let no_mic_hold = state_of(app).dictation.lock().unwrap().no_mic_hold;
     if no_mic_hold {
-        dismiss_no_mic_hold(&app);
-        return true;
+        dismiss_no_mic_hold(app);
+        return;
     }
-    match action.as_str() {
-        "cancel" => cancel_dictation(&app),
-        "pause" => toggle_pause(&app),
-        "confirm" => stop_dictation(&app),
+    match action {
+        "cancel" => cancel_dictation(app),
+        "pause" => toggle_pause(app),
+        "confirm" => stop_dictation(app),
         _ => {}
     }
+}
+
+#[tauri::command]
+fn pill_action(app: AppHandle, action: String) -> bool {
+    dispatch(&app, Action::Pill(action));
     true
 }
 
@@ -1380,8 +1451,8 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     }
     builder
         .on_menu_event(|app, event| match event.id().as_ref() {
-            "open" => show_main(app),
-            "toggle" => toggle_dictation(app),
+            "open" => dispatch(app, Action::ShowMain),
+            "toggle" => dispatch(app, Action::Toggle),
             "quit" => app.exit(0),
             _ => {}
         })
@@ -1390,11 +1461,14 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
 }
 
 fn show_main(app: &AppHandle) {
-    if let Some(win) = app.get_webview_window("main") {
-        let _ = win.show();
-        let _ = win.unminimize();
-        let _ = win.set_focus();
-    }
+    let handle = app.clone();
+    let _ = app.run_on_main_thread(move || {
+        if let Some(win) = handle.get_webview_window("main") {
+            let _ = win.show();
+            let _ = win.unminimize();
+            let _ = win.set_focus();
+        }
+    });
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -1423,9 +1497,9 @@ pub fn run() {
         // grab global hotkeys for itself.
         .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
             if argv.iter().any(|a| a == "--toggle") {
-                toggle_dictation(app);
+                dispatch(app, Action::Toggle);
             } else {
-                show_main(app);
+                dispatch(app, Action::ShowMain);
             }
         }))
         .plugin(
@@ -1477,6 +1551,7 @@ pub fn run() {
             if let Ok(dir) = app.path().resource_dir() {
                 asr::init(dir);
             }
+            start_action_worker(handle.clone());
             build_tray(&handle)?;
             refresh_hotkeys(&handle);
             apply_launch_at_login(state_of(&handle).setting("app.launchAtLogin", "0") == "1");

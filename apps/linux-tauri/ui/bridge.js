@@ -38,7 +38,7 @@ const INVOKE = {
   'mic:previewStop': ['mic_preview_stop'],
   'mic:verify': ['mic_verify', (id) => ({ deviceId: id || '' })],
   'pill:action': ['pill_action', (action) => ({ action })],
-  'pill:savePosition': ['pill_save_position'],
+  'pill:savePosition': ['pill_save_position', (d) => ({ scale: d && d.scale })],
   'alert:dismiss': ['alert_dismiss'],
   'preview:action': ['preview_action', (d) => ({ action: d.action, text: d.text || '' })],
   'preview:resize': ['preview_resize', (d) => ({ height: d.height || 0 })],
@@ -49,7 +49,7 @@ const INVOKE = {
 };
 
 const ALLOWED_ON = new Set([
-  'pill:state', 'pill:level',
+  'pill:state', 'pill:level', 'pill:scale',
   'alert:show',
   'notice:show',
   'preview:show',
@@ -77,4 +77,5 @@ window.coldvoice = {
     events.listen(channel, (e) => cb(e.payload));
   },
   window: T && T.window,
+  dpi: T && T.dpi,
 };

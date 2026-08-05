@@ -33,6 +33,10 @@ const CLIP_SAMPLE: f32 = 0.98;
 const CLIP_FRACTION: f64 = 0.003;
 const TRIM_FRAME_MS: u32 = 20;
 const TRIM_PAD_MS: u32 = 250;
+const TARGET_RMS: f32 = 0.06;
+const GAIN_MIN: f32 = 0.25;
+const GAIN_MAX: f32 = 12.0;
+const LIMIT_KNEE: f32 = 0.85;
 
 pub enum AudioEvent {
     Segment { pcm: Vec<i16>, sample_rate: u32, samples: usize, rms: f32 },
@@ -158,22 +162,42 @@ fn trim_silence(buf: &[f32], rate: u32, threshold: f32) -> Option<(usize, usize)
     Some((from, to))
 }
 
-// Peak-normalize quiet speech so whisper gets a strong signal even when the
-// user is far from the mic. Gain is capped so noise-only audio is not blown up
-// into something whisper hallucinates on, and loud audio is left untouched.
-fn normalize_quiet(buf: &[f32], rms: f32) -> Vec<f32> {
+fn remove_dc(buf: &mut [f32]) {
+    if buf.is_empty() {
+        return;
+    }
+    let mean: f32 = buf.iter().sum::<f32>() / buf.len() as f32;
+    if mean.abs() < 1e-5 {
+        return;
+    }
+    for s in buf.iter_mut() {
+        *s -= mean;
+    }
+}
+
+fn soft_limit(s: f32) -> f32 {
+    let mag = s.abs();
+    if mag <= LIMIT_KNEE {
+        return s;
+    }
+    let over = (mag - LIMIT_KNEE) / (1.0 - LIMIT_KNEE);
+    let shaped = LIMIT_KNEE + (1.0 - LIMIT_KNEE) * (1.0 - (-over).exp());
+    if s < 0.0 {
+        -shaped
+    } else {
+        shaped
+    }
+}
+
+fn auto_gain(buf: &[f32], rms: f32) -> Vec<f32> {
     if rms < 0.0015 {
         return buf.to_vec();
     }
-    let peak = buf.iter().fold(0.0f32, |m, s| m.max(s.abs()));
-    if peak < 1e-6 {
+    let gain = (TARGET_RMS / rms).clamp(GAIN_MIN, GAIN_MAX);
+    if (gain - 1.0).abs() <= 0.05 {
         return buf.to_vec();
     }
-    let gain = (0.9 / peak).min(12.0);
-    if gain <= 1.05 {
-        return buf.to_vec();
-    }
-    buf.iter().map(|s| s * gain).collect()
+    buf.iter().map(|s| soft_limit(s * gain)).collect()
 }
 
 fn float_to_pcm16(buf: &[f32]) -> Vec<i16> {
@@ -194,7 +218,8 @@ fn flush_segment(seg: &mut Segmenter, tx: &Sender<AudioEvent>) {
         return;
     }
     let merged: Vec<f32> = std::mem::take(&mut seg.pending);
-    let down = downsample(&merged, seg.input_rate, TARGET_RATE);
+    let mut down = downsample(&merged, seg.input_rate, TARGET_RATE);
+    remove_dc(&mut down);
     let threshold = seg.voice_threshold();
     let trimmed = trim_silence(&down, TARGET_RATE, threshold);
     let voiced: &[f32] = match trimmed {
@@ -205,7 +230,7 @@ fn flush_segment(seg: &mut Segmenter, tx: &Sender<AudioEvent>) {
     // The reported rms is the ORIGINAL (pre-normalization) level so the caller
     // can still reject true silence.
     let reported = if trimmed.is_some() { rms } else { rms_of(&down) };
-    let pcm = float_to_pcm16(&normalize_quiet(voiced, rms));
+    let pcm = float_to_pcm16(&auto_gain(voiced, rms));
     let _ = tx.send(AudioEvent::Segment {
         samples: voiced.len(),
         pcm,

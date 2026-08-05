@@ -21,6 +21,8 @@ object Settings {
     const val KEY_GROQ_API_KEY = "ai.groqApiKey"
     const val KEY_DEVELOPER_MODE = "dictation.developerMode"
     const val KEY_OFFLINE_MODE = "app.offlineMode"
+    const val KEY_TONE = "dictation.tone"
+    const val KEY_STORE_TRANSCRIPTS = "privacy.storeTranscripts"
 
     // Same free-tier Groq key the desktop app ships with (seedDefaults in main.js).
     // Whisper turbo + Llama both run on Groq's free tier through this one key.
@@ -61,5 +63,21 @@ object Settings {
 
     fun setDeveloperMode(context: Context, on: Boolean) {
         prefs(context).edit().putBoolean(KEY_DEVELOPER_MODE, on).apply()
+    }
+
+    fun tone(context: Context): String =
+        prefs(context).getString(KEY_TONE, "auto").orEmpty().ifBlank { "auto" }
+
+    fun setTone(context: Context, tone: String) {
+        prefs(context).edit().putString(KEY_TONE, tone).apply()
+    }
+
+    fun toneForModel(context: Context): String? = tone(context).takeIf { it != "auto" }
+
+    fun storeTranscripts(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_STORE_TRANSCRIPTS, true)
+
+    fun setStoreTranscripts(context: Context, on: Boolean) {
+        prefs(context).edit().putBoolean(KEY_STORE_TRANSCRIPTS, on).apply()
     }
 }

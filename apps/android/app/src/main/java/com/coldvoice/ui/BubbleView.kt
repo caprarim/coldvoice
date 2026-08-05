@@ -32,7 +32,7 @@ class BubbleView(context: Context) : FrameLayout(context) {
         clipToOutline = true
         outlineProvider = object : ViewOutlineProvider() {
             override fun getOutline(view: View, outline: Outline) {
-                outline.setRoundRect(0, 0, view.width, view.height, 18f * d)
+                outline.setRoundRect(0, 0, view.width, view.height, 16f * d)
             }
         }
         addView(icon, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))

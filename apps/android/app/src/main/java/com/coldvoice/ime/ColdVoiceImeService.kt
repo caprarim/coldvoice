@@ -310,7 +310,17 @@ class ColdVoiceImeService : InputMethodService(), DictationController.Callbacks 
         listening = true
         pill?.setState(PillView.State.RECORDING)
         hintView?.text = "Listening…"
+        controller?.targetApp = targetAppLabel()
         controller?.start()
+    }
+
+    private fun targetAppLabel(): String? {
+        val pkg = currentInputEditorInfo?.packageName?.takeIf { it.isNotBlank() } ?: return null
+        return try {
+            packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg, 0)).toString()
+        } catch (_: Exception) {
+            pkg
+        }
     }
 
     private fun stopListening() {

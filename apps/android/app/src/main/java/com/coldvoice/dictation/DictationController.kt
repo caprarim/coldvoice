@@ -9,6 +9,7 @@ import com.coldvoice.asr.VoskAsrEngine
 import com.coldvoice.audio.MicRecorder
 import com.coldvoice.audio.WavEncoder
 import com.coldvoice.data.Settings
+import com.coldvoice.data.Store
 import com.coldvoice.net.Connectivity
 import com.coldvoice.text.TextPipeline
 import kotlin.concurrent.thread
@@ -73,10 +74,24 @@ class DictationController(
     /** Whether the mic delivered anything but digital silence this utterance. */
     @Volatile private var heardSignal = false
 
+    /**
+     * Which app the finished text is going into, recorded with the transcript so
+     * the Home feed and Insights can break usage down per app. Set by whichever
+     * consumer owns the dictation before [start].
+     */
+    var targetApp: String? = null
+
+    private var startedAt = 0L
+    private val rawAssembled = StringBuilder()
+    private var dictionary: List<TextPipeline.DictEntry> = emptyList()
+    private var snippets: List<TextPipeline.Snippet> = emptyList()
+    private var tone: String? = null
+
     init {
         // Unpack + load the offline model off the main thread so on-device
         // dictation is ready by the time the user first taps to speak.
         thread(name = "coldvoice-vosk-init") { vosk.load() }
+        thread(name = "coldvoice-store-warm") { Store.warm(context) }
     }
 
     /** True once the bundled offline model is loaded and on-device ASR is usable. */
@@ -107,12 +122,35 @@ class DictationController(
             System.currentTimeMillis() >= cloudBlockedUntil &&
             Connectivity.isOnline(context)
 
+    /**
+     * The user's own exact rules for this utterance. Read at START so a word added
+     * a moment ago is already in force, and held for the whole dictation so the
+     * rules can't change halfway through it.
+     */
+    private fun loadUserRules() {
+        dictionary = Store.listDictionary(context)
+            .filter { it.enabled && it.phrase.isNotBlank() }
+            .flatMap { entry ->
+                val replacement = entry.replacement.ifBlank { entry.phrase }
+                listOf(TextPipeline.DictEntry(entry.phrase, replacement, entry.caseSensitive)) +
+                    entry.aliases.filter { it.isNotBlank() }
+                        .map { TextPipeline.DictEntry(it, replacement, entry.caseSensitive) }
+            }
+        snippets = Store.listSnippets(context)
+            .filter { it.enabled && it.trigger.isNotBlank() }
+            .map { TextPipeline.Snippet(it.trigger, it.expansion, true) }
+        tone = Settings.toneForModel(context)
+    }
+
     fun start() {
         if (active) return
         active = true
         cancelled = false
         paused = false
         assembled.setLength(0)
+        rawAssembled.setLength(0)
+        startedAt = System.currentTimeMillis()
+        loadUserRules()
         engine = if (cloudReady()) Engine.CLOUD else Engine.OFFLINE
         offlineUsesVosk = engine == Engine.OFFLINE && vosk.ready
         callbacks.onState(State.RECORDING)
@@ -241,11 +279,19 @@ class DictationController(
 
     /** Clean a recognized phrase and append/emit it if there's anything left. */
     private fun commitChunk(raw: String) {
-        val clean = TextPipeline.process(raw).trim()
+        val clean = TextPipeline.process(raw, dictionary, snippets).trim()
         if (clean.isBlank()) return
+        appendRaw(raw)
         if (assembled.isNotEmpty()) assembled.append(' ')
         assembled.append(clean)
         post { callbacks.onCommit(clean) }
+    }
+
+    private fun appendRaw(raw: String) {
+        val piece = raw.trim()
+        if (piece.isEmpty()) return
+        if (rawAssembled.isNotEmpty()) rawAssembled.append(' ')
+        rawAssembled.append(piece)
     }
 
     // --- OFFLINE (on-device SpeechRecognizer fallback) ------------------------
@@ -264,8 +310,9 @@ class DictationController(
     }
 
     override fun onFinal(text: String) {
-        val clean = TextPipeline.process(text)
+        val clean = TextPipeline.process(text, dictionary, snippets)
         if (clean.isBlank()) return
+        appendRaw(text)
         if (assembled.isNotEmpty()) assembled.append(' ')
         assembled.append(clean)
         post { callbacks.onCommit(clean) }
@@ -348,6 +395,7 @@ class DictationController(
         post { callbacks.onState(State.TRANSCRIBING) }
         val key = Settings.groqApiKey(context)
         val developerMode = Settings.developerMode(context)
+        val utteranceTone = tone
         thread(name = "coldvoice-groq") {
             var text = ""
             try {
@@ -359,6 +407,7 @@ class DictationController(
                 )
                 val client = GroqClient(key)
                 val raw = client.transcribe(wav).trim()
+                appendRaw(raw)
                 // Same split as desktop main.js: very short utterances go straight
                 // through the deterministic rules (an LLM round-trip would cost
                 // more latency than it's worth), everything else gets the real
@@ -367,11 +416,13 @@ class DictationController(
                 text = when {
                     raw.isBlank() -> ""
                     raw.split(Regex("\\s+")).size <= SHORT_UTTERANCE_WORDS ->
-                        TextPipeline.process(raw).trim()
+                        TextPipeline.process(raw, dictionary, snippets).trim()
                     else -> try {
-                        TextPipeline.applyUserRules(client.cleanText(raw, developerMode)).trim()
+                        TextPipeline.applyUserRules(
+                            client.cleanText(raw, developerMode, utteranceTone), dictionary, snippets
+                        ).trim()
                     } catch (e: Exception) {
-                        TextPipeline.process(raw).trim()
+                        TextPipeline.process(raw, dictionary, snippets).trim()
                     }
                 }
             } catch (e: Exception) {
@@ -380,7 +431,9 @@ class DictationController(
                 // making the user say it all again, and stop choosing the cloud
                 // for a while so the next few dictations are simply fast.
                 cloudBlockedUntil = System.currentTimeMillis() + CLOUD_COOLDOWN_MS
-                text = TextPipeline.process(offlineRescue(samples)).trim()
+                val rescued = offlineRescue(samples)
+                appendRaw(rescued)
+                text = TextPipeline.process(rescued, dictionary, snippets).trim()
                 if (text.isBlank()) {
                     post { callbacks.onState(State.ERROR, "Cloud unavailable — tap to retry") }
                     return@thread
@@ -421,9 +474,25 @@ class DictationController(
             post { callbacks.onState(State.INFO, "No speech detected") }
             return
         }
+        saveToHistory(full)
         post {
             callbacks.onComplete(full)
             callbacks.onState(State.DONE)
+        }
+    }
+
+    /**
+     * Keep the finished dictation, so mobile has the same all-time history the
+     * desktop app does. Local only — the row never leaves the phone, and nothing
+     * is written at all when the user has history switched off.
+     */
+    private fun saveToHistory(final: String) {
+        if (!Settings.storeTranscripts(context)) return
+        val raw = rawAssembled.toString().trim().ifBlank { final }
+        val durationMs = if (startedAt > 0) System.currentTimeMillis() - startedAt else 0L
+        val app = targetApp
+        thread(name = "coldvoice-history") {
+            Store.saveTranscript(context, raw, final, app, durationMs)
         }
     }
 

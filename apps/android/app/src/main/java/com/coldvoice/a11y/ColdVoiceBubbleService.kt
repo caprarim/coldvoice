@@ -79,7 +79,10 @@ class ColdVoiceBubbleService : AccessibilityService(), DictationController.Callb
             AccessibilityEvent.TYPE_VIEW_FOCUSED,
             AccessibilityEvent.TYPE_VIEW_CLICKED,
             AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED,
-            AccessibilityEvent.TYPE_VIEW_TEXT_SELECTION_CHANGED,
+            AccessibilityEvent.TYPE_VIEW_TEXT_SELECTION_CHANGED -> {
+                focusHint = true
+                scheduleFocusCheck()
+            }
             AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED,
             AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED,
             AccessibilityEvent.TYPE_WINDOWS_CHANGED -> scheduleFocusCheck()
@@ -90,21 +93,38 @@ class ColdVoiceBubbleService : AccessibilityService(), DictationController.Callb
     /**
      * Events arrive in bursts — a tap on a field emits focus, selection and window
      * changes within a few milliseconds, and the keyboard adds its own on top.
-     * Re-evaluating on each one made the control blink, so the burst is collapsed
-     * into a single check.
+     * Re-evaluating on each one made the control blink, so the tail of the burst
+     * is collapsed into a single check.
+     *
+     * The first event of a burst is acted on immediately, though, and that is
+     * what stopped the square arriving late. Debouncing alone rescheduled the
+     * check on every event, and a keyboard sliding in emits content-changed
+     * events for as long as it animates — so the check kept being pushed further
+     * out and the control only appeared once the screen had settled.
      */
     private fun scheduleFocusCheck() {
         main.removeCallbacks(focusCheck)
+        val now = System.currentTimeMillis()
+        if (attached == null && now - lastImmediateCheck >= IMMEDIATE_MIN_GAP_MS) {
+            lastImmediateCheck = now
+            evaluateFocus(deep = false)
+        }
         main.postDelayed(focusCheck, FOCUS_DEBOUNCE_MS)
     }
 
-    private val focusCheck = Runnable { evaluateFocus() }
+    private val focusCheck = Runnable {
+        val hinted = focusHint
+        focusHint = false
+        evaluateFocus(deep = attached != null || focusedNode != null || hinted)
+    }
     private val hideRunnable = Runnable { hideNow() }
+    private var lastImmediateCheck = 0L
+    private var focusHint = false
 
-    private fun evaluateFocus() {
+    private fun evaluateFocus(deep: Boolean) {
         // Never yank the control out from under a live dictation.
         if (expanded || listening) return
-        val node = editableFocus(deep = attached != null)
+        val node = editableFocus(deep = deep)
         if (node != null) {
             main.removeCallbacks(hideRunnable)
             if (node !== focusedNode) {
@@ -134,9 +154,10 @@ class ColdVoiceBubbleService : AccessibilityService(), DictationController.Callb
      * trusted: keyboard and popup windows report themselves as the source, which
      * would otherwise read as "no text field" and hide the control mid-typing.
      *
-     * The `deep` sweep walks every window and is only worth its cost while the
-     * control is already on screen — that is when the editor may have slipped
-     * behind a popup and the cheap lookups come back empty.
+     * The `deep` sweep walks every window, so it is reserved for the settled
+     * check at the end of an event burst — the cheap lookups run first, and the
+     * sweep only matters when they come back empty because the editor slipped
+     * behind a popup or the keyboard's window.
      */
     private fun editableFocus(deep: Boolean): AccessibilityNodeInfo? {
         findFocus(AccessibilityNodeInfo.FOCUS_INPUT)?.let {
@@ -317,7 +338,22 @@ class ColdVoiceBubbleService : AccessibilityService(), DictationController.Callb
         dictated.setLength(0)
         listening = true
         pill?.setState(PillView.State.RECORDING)
+        controller?.targetApp = focusedAppLabel()
         controller?.start()
+    }
+
+    /**
+     * The app being dictated into, by its display name, so the history reads
+     * "WhatsApp" rather than "com.whatsapp".
+     */
+    private fun focusedAppLabel(): String? {
+        val pkg = focusedNode?.packageName?.toString()?.takeIf { it.isNotBlank() } ?: return null
+        return try {
+            val pm = packageManager
+            pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString()
+        } catch (_: Exception) {
+            pkg
+        }
     }
 
     // --- DictationController callbacks ----------------------------------------
@@ -494,8 +530,10 @@ class ColdVoiceBubbleService : AccessibilityService(), DictationController.Callb
 
     private companion object {
         const val FOCUS_DEBOUNCE_MS = 150L
+        /** Ceiling on how often the leading-edge check runs during an event storm. */
+        const val IMMEDIATE_MIN_GAP_MS = 60L
         const val HIDE_GRACE_MS = 900L
-        const val BUBBLE_DP = 64
+        const val BUBBLE_DP = 56
         const val PILL_W_DP = 252
         const val PILL_H_DP = 60
 

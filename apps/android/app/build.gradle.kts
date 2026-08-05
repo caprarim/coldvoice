@@ -33,8 +33,8 @@ android {
         applicationId = "com.coldvoice"
         minSdk = 26
         targetSdk = 34
-        versionCode = 5
-        versionName = "0.3.2"
+        versionCode = 6
+        versionName = "0.4.0"
         buildConfigField("String", "GROQ_API_KEY", "\"$groqApiKey\"")
         // Real phones are arm; dropping the x86/x86_64 emulator ABIs that Vosk
         // bundles keeps the download roughly half the size.

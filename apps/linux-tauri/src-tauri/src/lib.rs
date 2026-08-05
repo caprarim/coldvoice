@@ -424,6 +424,7 @@ fn stop_dictation(app: &AppHandle) {
     }
     drop(d);
     unregister_escape(app);
+    overlays::pill_state(app, "transcribing", None);
     overlays::notice_show(
         app,
         "stopped",
@@ -941,6 +942,13 @@ fn unregister_escape(app: &AppHandle) {
     for shortcut in dropped {
         let _ = app.global_shortcut().unregister(shortcut);
     }
+    flush_pending_ungrabs(app);
+}
+
+fn flush_pending_ungrabs(app: &AppHandle) {
+    if let Ok(shortcut) = "Escape".parse::<Shortcut>() {
+        let _ = app.global_shortcut().unregister(shortcut);
+    }
 }
 
 fn refresh_hotkeys(app: &AppHandle) {
@@ -982,6 +990,7 @@ fn refresh_hotkeys(app: &AppHandle) {
             }
         }
     }
+    flush_pending_ungrabs(app);
     logf!("dictation armed: toggle={} hold={} paste={} pause={}", toggle, hold, paste, if pause.is_empty() { "not set" } else { pause.as_str() });
 
     if !failed.is_empty() {
